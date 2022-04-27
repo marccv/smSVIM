@@ -11,6 +11,9 @@ import scipy.fftpack as sp_fft
 from get_h5_data import get_h5_dataset, get_h5_attr
 import tifffile as tiff
 import os
+import matplotlib.pyplot as plt
+plt.rcParams['figure.dpi'] = 600
+plt.rcParams.update({'font.size': 7})
 
 
 import sys
@@ -51,12 +54,16 @@ class coherentSVIM_analysis:
                           
    
         sys.exit ( "End of test")
+        
+    def remove_dark_counts(self):
+        
+        self.imageRaw = (self.imageRaw - 100).clip(min = 0)
     
     def setROI(self, x_min, y_min, ROIsize):
         
         self.imageRaw = self.imageRaw[:, x_min :x_min +ROIsize, y_min: y_min+ROIsize]
         
-    def chose_freq(self, N):
+    def choose_freq(self, N):
         
         f_start = get_h5_attr(self.filename, 'f_min')[0]
         f_stop = get_h5_attr(self.filename, 'f_max')[0]
@@ -73,8 +80,8 @@ class coherentSVIM_analysis:
         self.imageRaw = self.imageRaw[0:N, :, :]
         self.disp_freqs = disp_freqs[0:N]
         
-        
-        # mask = np.append(np.logical_not(np.diff(disp_freqs)== 0), True)
+        # to eliminate copies of the same frequency
+        # mask = np.append(np.diff(disp_freqs)!= 0, True)
         
         # self.imageRaw = self.imageRaw[mask, :, :]
         # self.disp_freqs = np.array(disp_freqs)[mask]
@@ -82,20 +89,25 @@ class coherentSVIM_analysis:
         
     def invert(self, base = 'sq'):
         
-        self.transform = t_6090.dct_6090(self.disp_freqs)
+        contrast = 0.5
+        
+        self.transform = t_6090.dct_6090(self.disp_freqs, contrast)
         self.transform.create_space()
         
         if base == 'cos':
             self.transform.create_matrix_cos()
+            self.transform.compute_inverse()
+            self.image_inv = np.tensordot(self.transform.inv_matrix ,  self.imageRaw , axes=([1],[0]))
+            
         elif base == 'sq':
             self.transform.create_matrix_sq()
+            self.transform.compute_inverse()
+            self.image_inv = np.tensordot(self.transform.inv_matrix ,  self.imageRaw , axes=([1],[0]))
+            
         elif base == 'sp_dct':
             self.image_inv = sp_fft.idct(self.imageRaw, type = 2, axis = 0)
-            return
+            
         
-        self.transform.compute_inverse()
-        
-        self.image_inv = np.tensordot(self.transform.inv_matrix ,  self.imageRaw , axes=([1],[0]))
         
     def show_inverted(self):
         pg.image(self.image_inv, title="Inverted image")        
@@ -106,9 +118,86 @@ class coherentSVIM_analysis:
                           
    
         sys.exit ( "End of test")
-    
-    def save_inverted(self, outputFile):
         
+    def show_inverted_proj(self):
+        
+        inverted_xy = np.sum(self.image_inv, 0)
+        inverted_xz = np.sum(self.image_inv, 2)
+        
+        c_min = min( np.amin(np.amin(inverted_xy, 1), 0) , np.amin(np.amin(inverted_xz, 1), 0) )
+        c_max = max(np.amax(np.amax(inverted_xy, 1), 0) , np.amax(np.amax(inverted_xz, 1), 0) )
+        
+        
+        fig1, (ax1, ax2) =plt.subplots(2, 1, gridspec_kw={'height_ratios': [ 4, 1]})
+        # fig1.clf()
+        fig1.text(0.1,0.2, 'Inverted image projections')
+        
+        xy = ax1.imshow(inverted_xy.transpose(), cmap = 'gray', aspect = 1, vmin = c_min, vmax = c_max)
+        ax1.set_xlabel('x (px)')
+        ax1.set_ylabel('y (px)')
+        cbar = fig1.colorbar(xy, ax = ax1, format='%.0e')
+        cbar.ax.set_ylabel('Counts', rotation=270)
+        
+        xz = ax2.imshow(inverted_xz, cmap = 'gray', aspect = 12.82,  vmin = c_min, vmax = c_max) #aspect = 12.82
+        ax2.set_xlabel('x (px)')
+        ax2.set_ylabel('z (px)')
+        # fig1.colorbar(xz, ax = ax1)
+        
+        
+    def show_inverted_xy(self):
+        inverted_xy = np.sum(self.image_inv, 0)
+        
+        fig1=plt.figure(num=1)
+        fig1.clf()
+        fig1.suptitle('Inverted image XY projection')
+        ax1=fig1.add_subplot(111)
+        xy = ax1.imshow(inverted_xy.transpose(), cmap = 'gray', aspect = 1)
+        ax1.set_xlabel('x (px)')
+        ax1.set_ylabel('y (px)')
+        cbar = fig1.colorbar(xy, ax = ax1, format='%.0e')
+        cbar.ax.set_ylabel('Counts', rotation=270)
+        
+    def show_inverted_xz(self):
+        inverted_xz = np.sum(self.image_inv, 2)
+        
+        fig1=plt.figure(num=2, figsize = (5, 2))
+        fig1.clf()
+        
+        ax1=fig1.add_subplot(111)
+        fig1.suptitle('Inverted image XZ projection')
+        xz = ax1.imshow(inverted_xz, cmap = 'gray', aspect = 30, interpolation = 'none') #aspect = 12.82
+        ax1.set_xlabel('x (px)')
+        ax1.set_ylabel('z (px)')
+        cbar = fig1.colorbar(xz, ax = ax1, shrink=0.6, format='%.0e')
+        cbar.ax.set_ylabel('Counts', rotation=270)
+        
+    def show_inverted3D(self):
+        
+        from pyqtgraph.Qt import QtCore, QtGui
+        import pyqtgraph.opengl as gl
+        
+        # create qtgui
+        app = QtGui.QApplication([])
+        w = gl.GLViewWidget()
+        w.orbit(256, 256)
+        w.setCameraPosition(0, 0, 0)
+        w.opts['distance'] = 200
+        w.show()
+        w.setWindowTitle('pyqtgraph example: GLVolumeItem')
+        
+        g = gl.GLGridItem()
+        g.scale(20, 20, 1)
+        w.addItem(g)
+        
+        
+        v = gl.GLVolumeItem(self.image_inv, sliceDensity=1, smooth=False, glOptions='translucent')
+        v.translate(-self.image_inv.shape[0]/2, -self.image_inv.shape[1]/2, -150)
+        w.addItem(v)
+        
+        if (sys.flags.interactive != 1) or not hasattr(QtCore, 'PYQT_VERSION'):
+            QtGui.QApplication.instance().exec_()
+            
+    def save_inverted(self, outputFile):
         
         tiff.imsave(outputFile , np.uint16(self.image_inv.clip(min = 0)), append = False) 
         
@@ -125,25 +214,27 @@ if __name__ == "__main__" :
         
         dataset = coherentSVIM_analysis(file_name)
         dataset.load_h5_file()
+        dataset.remove_dark_counts()
         # dataset.setROI(594,  306, 963)
         # dataset.show_im_raw()
         
-        dataset.chose_freq(24)
+        dataset.choose_freq(24)
         dataset.invert(base = 'sq')
-        # dataset.show_inverted()
+        dataset.show_inverted_xy()
+        dataset.show_inverted_xz()
         
         
         
-        # save_file = '/Users/marcovitali/Documents/Poli/tesi/ScopeFoundy/coherentSVIM/data/220422_174325_coherent_SVIM_inverted.tif'
-        save_file = '/Users/marcovitali/Documents/Poli/tesi/ScopeFoundy/coherentSVIM/data/data_22_4/220422_180920_coherent_SVIM_phantom1_inverted.tif'        
+        # # save_file = '/Users/marcovitali/Documents/Poli/tesi/ScopeFoundy/coherentSVIM/data/220422_174325_coherent_SVIM_inverted.tif'
+        # save_file = '/Users/marcovitali/Documents/Poli/tesi/ScopeFoundy/coherentSVIM/data/data_22_4/220422_180920_coherent_SVIM_phantom1_inverted.tif'        
         
-        try:
-            os.remove(save_file)
-        except:
-            print('file name not found')
+        # try:
+        #     os.remove(save_file)
+        # except:
+        #     print('file name not found')
             
             
-        dataset.save_inverted(save_file)
+        # dataset.save_inverted(save_file)
         
         
         

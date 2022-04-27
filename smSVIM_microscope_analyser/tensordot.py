@@ -36,3 +36,6 @@ print(a)
 # print(mask)
 
 print(a[mask])
+
+
+# fig, (ax1, ax2, ax3) = plt.subplots(figsize=(13, 3), ncols=3)
