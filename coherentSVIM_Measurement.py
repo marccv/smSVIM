@@ -154,23 +154,35 @@ class coherentSvimMeasurement(Measurement):
     
     
     def set_f_min(self,f_min):
-        # self.settings['f_min'] = f_min
         
-        if hasattr(self, 'num_frames'):
-            self.settings['num_frames']  = 2*(self.settings['f_max'] - f_min) + 1
+        if (f_min*10)%5 != 0:
+            
+            f_min = round(f_min*2)/2
+            self.settings['f_min'] = f_min
+        else:
+            if hasattr(self, 'num_frames'):
+                self.settings['num_frames']  = (1 + self.settings['PosNeg']) * ( 2*(self.settings['f_max'] - f_min) + 1)
             
     def set_f_max(self,f_max):
-        # self.settings['f_max'] = f_max
+        
+        if (f_max*10)%5 != 0:
+            
+            f_max = round(f_max*2)/2
+            self.settings['f_max'] = f_max
+        else:
+            if hasattr(self, 'num_frames'):
+               self.settings['num_frames']  = (1 + self.settings['PosNeg']) * (2*(f_max - self.settings['f_min']) + 1)
+     
+    def set_PosNeg(self, PosNeg):
         
         if hasattr(self, 'num_frames'):
-           self.settings['num_frames']  = 2*(f_max - self.settings['f_min']) + 1
-     
+           self.settings['num_frames']  =(1 + PosNeg) * (2*(self.settings['f_max'] - self.settings['f_min']) + 1)
            
     def calculate_margin(self):
         
         read_one_line = 9.74436 #(us)
         delay =  9 * read_one_line #(us)
-        contingency = 0.005
+        contingency = 0.008
         self.eff_subarrayv = int(self.camera.subarrayv.val/self.camera.binning.val)
         
         return (1 + contingency) * (delay + (self.eff_subarrayv/2) * read_one_line) *1e-3 #(ms)
@@ -220,9 +232,10 @@ class coherentSvimMeasurement(Measurement):
         self.settings.New('auto_levels', dtype=bool, initial=True )
         self.settings.New('level_min', dtype=int, initial=60 )
         self.settings.New('level_max', dtype=int, initial=150 )
-        self.f_min = self.settings.New('f_min', dtype=int, initial=0 )
-        self.f_max = self.settings.New('f_max', dtype=int, initial=10 )
-        self.num_frames = self.settings.New('num_frames',ro = True, dtype = int, initial = 21) 
+        self.f_min = self.settings.New('f_min', dtype=float, initial=0.0, spinbox_step= 0.5 , spinbox_decimals= 1, vmin = 0)
+        self.f_max = self.settings.New('f_max', dtype=float, initial=10.0 , spinbox_step= 0.5, spinbox_decimals=1, vmin = 0)
+        self.PosNeg = self.settings.New('PosNeg', dtype = bool, initial = True)
+        self.num_frames = self.settings.New('num_frames',ro = True, dtype = int, initial = 42) 
         self.settings.New('ROI_s_z', dtype=int, initial=200, unit = 'px' )
         self.settings.New('ROI_s_y', dtype=int, initial=600, unit = 'px' )
         self.settings.New('transpose_pattern', dtype=bool, initial=False )
@@ -236,6 +249,7 @@ class coherentSvimMeasurement(Measurement):
         #set functions
         self.f_min.hardware_set_func = self.set_f_min
         self.f_max.hardware_set_func = self.set_f_max
+        self.PosNeg.hardware_set_func = self.set_PosNeg
         self.exposure.hardware_set_func = self.set_exposure
         self.subarray_vsize.hardware_set_func = self.set_subarray_vsize
         
@@ -322,10 +336,8 @@ class coherentSvimMeasurement(Measurement):
         t = time.time()
         f_start = self.settings['f_min']
         f_stop = self.settings['f_max']
-        freqs = np.linspace(f_start, f_stop, 2*(f_stop - f_start) + 1,dtype = float)
-        phases = np.linspace(0,1, self.dmd_hw.number_of_phases.val , endpoint = False, dtype = float) # they will be used as fractions of the period  
-        num_frames = len(freqs) * self.dmd_hw.number_of_phases.val
-        
+        freqs = np.linspace(f_start, f_stop, int(2*(f_stop - f_start) + 1),dtype = float)
+        num_frames = self.settings['num_frames']
         
         
         self.settings['edge_trigger_margin'] = self.calculate_margin()
@@ -334,19 +346,14 @@ class coherentSvimMeasurement(Measurement):
         self.settings['effective_fps'] =  self.calculate_eff_fps()
         
 
-        
         dark_time = [self.dmd_hw.dark_time.val]*num_frames
         trigger_input = [self.dmd_hw.trigger_input.val]*num_frames
         trigger_output = [self.dmd_hw.trigger_output.val]*num_frames
-        
         rep = num_frames
-        # self.dmd_hw.settings['sequence_repetitions'] = 1 # Update the HW setting  
-        
        
         # I tell the camera how manìy frames to record
         self.camera.settings['number_frames'] = num_frames
         self.camera.settings['exposure_time'] = exposure*1e-3
-        
         
         
         transpose_pattern = self.settings['transpose_pattern']
@@ -360,38 +367,37 @@ class coherentSvimMeasurement(Measurement):
         else:
             centered = False
         
-        
-        
         print(f'\nCreating {num_frames} patterns...\n\nTheoretical frequencies: ', freqs)
-        print('\nPhases: ', phases)
+        print('\nPosNeg: ', self.settings['PosNeg'])
         print('\nPlease wait...', end = '')
         
         mask = create_rectangle_mask(crop_squared_size)
         
+        # common initial phase
+        phase = 0
+        
         images = []
         freqs_out = []
         
-        if self.dmd_hw.squared_scan_mode.val == 'periods_then_phases':
-             for phase in phases:
-                # print('\n')
-                for freq in freqs:
-                    # print(f'Creating square wave with freq   {freq:3d}   and phase shift   {phase:.2f}')
-                    
-                    im, freq_out = create_squared_pattern_from_freq(freq,transpose_pattern, crop_squared_size, centered, phase)
-                    
-                    images.append(im)
-                    freqs_out.append(freq_out)
-        
-        elif self.dmd_hw.squared_scan_mode.val == 'phases_then_periods':
+        if self.settings['PosNeg'] == False:
+             
             for freq in freqs:
-                # print('\n')
-                for phase in phases:
-                    # print(f'Creating square wave with freq   {freq:3d}   and phase shift   {phase:.2f}')
-                    
-                    im, freq_out = create_squared_pattern_from_freq(freq,transpose_pattern, crop_squared_size, centered, phase)
-                    
-                    images.append(im)
-                    freqs_out.append(freq_out)
+
+                im_pos, freq_out = create_squared_pattern_from_freq(freq,transpose_pattern, crop_squared_size, centered, phase)
+                
+                images.append(im_pos)
+                freqs_out.append(freq_out)
+        
+        else:
+            #PosNeg
+            for freq in freqs:
+
+                im_pos, freq_out = create_squared_pattern_from_freq(freq,transpose_pattern, crop_squared_size, centered, phase)
+                im_neg = np.uint8(np.logical_not(im_pos)*1)
+                
+                images.append(im_pos)
+                images.append(im_neg)
+                freqs_out.append(freq_out)
                     
                     
         images_arr = np.array(images)
@@ -442,7 +448,7 @@ class coherentSvimMeasurement(Measurement):
         t_shutter_open = time.time()
         
         self.shutter_hw.shutter.open_shutter()
-        
+        time.sleep(0.1) #seconds
         
         #=====================================
         # DMD start

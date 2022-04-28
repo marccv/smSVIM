@@ -12,7 +12,7 @@ from get_h5_data import get_h5_dataset, get_h5_attr
 import tifffile as tiff
 import os
 import matplotlib.pyplot as plt
-plt.rcParams['figure.dpi'] = 600
+plt.rcParams['figure.dpi'] = 300
 plt.rcParams.update({'font.size': 7})
 
 
@@ -55,9 +55,27 @@ class coherentSVIM_analysis:
    
         sys.exit ( "End of test")
         
-    def remove_dark_counts(self):
+    def show_im_raw_cc(self):
         
-        self.imageRaw = (self.imageRaw - 100).clip(min = 0)
+        fig1=plt.figure()
+        fig1.clf()
+        
+        ax1=fig1.add_subplot(111)
+        fig1.suptitle('Raw image uniform illumination')
+        xy = ax1.imshow(self.imageRaw[0,:,:].transpose(), cmap = 'gray', aspect = 1, interpolation = 'none') 
+        ax1.set_xlabel('x (px)')
+        ax1.set_ylabel('y (px)')
+        cbar = fig1.colorbar(xy, ax = ax1, shrink=1, format='%.0e')
+        cbar.ax.set_ylabel('Counts', rotation=270)
+        
+    def merge_pos_neg(self):
+        
+        num_frames = self.imageRaw.shape[0]
+        
+        pos = self.imageRaw[np.linspace(0, num_frames -2, int(num_frames/2), dtype = 'int'), :, :]
+        neg = self.imageRaw[np.linspace(1, num_frames -1, int(num_frames/2), dtype = 'int'), :, :]
+        
+        self.imageRaw = pos - neg
     
     def setROI(self, x_min, y_min, ROIsize):
         
@@ -69,7 +87,7 @@ class coherentSVIM_analysis:
         f_stop = get_h5_attr(self.filename, 'f_max')[0]
         ROI_s_z = get_h5_attr(self.filename, 'ROI_s_z')[0]
         
-        freqs = np.linspace(f_start, f_stop, 2*(f_stop - f_start) + 1,dtype = float)
+        freqs = np.linspace(f_start, f_stop, int(2*(f_stop - f_start) + 1),dtype = float)
         disp_freqs = [0]
         
         for freq in freqs[1:]:
@@ -89,9 +107,9 @@ class coherentSVIM_analysis:
         
     def invert(self, base = 'sq'):
         
-        contrast = 0.5
+        self.base = base
         
-        self.transform = t_6090.dct_6090(self.disp_freqs, contrast)
+        self.transform = t_6090.dct_6090(self.disp_freqs)
         self.transform.create_space()
         
         if base == 'cos':
@@ -105,12 +123,14 @@ class coherentSVIM_analysis:
             self.image_inv = np.tensordot(self.transform.inv_matrix ,  self.imageRaw , axes=([1],[0]))
             
         elif base == 'sp_dct':
-            self.image_inv = sp_fft.idct(self.imageRaw, type = 2, axis = 0)
+            dct_coeff = self.imageRaw
+            dct_coeff[0,:,:] *= 1/np.sqrt(2)  # I rescale the cw illumination >> It just shifts the inverted image towards more negative values
+            self.image_inv = sp_fft.idct(dct_coeff, type = 2, axis = 0, norm = 'ortho')
             
         
         
     def show_inverted(self):
-        pg.image(self.image_inv, title="Inverted image")        
+        pg.image(self.image_inv, title= f"Inverted image (base: {self.base})")        
                
         #keeps the window open running a QT application
         if sys.flags.interactive != 1 or not hasattr(qtpy.QtCore, 'PYQT_VERSION'):
@@ -130,7 +150,7 @@ class coherentSVIM_analysis:
         
         fig1, (ax1, ax2) =plt.subplots(2, 1, gridspec_kw={'height_ratios': [ 4, 1]})
         # fig1.clf()
-        fig1.text(0.1,0.2, 'Inverted image projections')
+        fig1.text(0.1,0.2, f'Inverted image projections (base: {self.base})')
         
         xy = ax1.imshow(inverted_xy.transpose(), cmap = 'gray', aspect = 1, vmin = c_min, vmax = c_max)
         ax1.set_xlabel('x (px)')
@@ -147,9 +167,9 @@ class coherentSVIM_analysis:
     def show_inverted_xy(self):
         inverted_xy = np.sum(self.image_inv, 0)
         
-        fig1=plt.figure(num=1)
+        fig1=plt.figure()
         fig1.clf()
-        fig1.suptitle('Inverted image XY projection')
+        fig1.suptitle(f'Inverted image XY projection (base: {self.base})')
         ax1=fig1.add_subplot(111)
         xy = ax1.imshow(inverted_xy.transpose(), cmap = 'gray', aspect = 1)
         ax1.set_xlabel('x (px)')
@@ -160,11 +180,11 @@ class coherentSVIM_analysis:
     def show_inverted_xz(self):
         inverted_xz = np.sum(self.image_inv, 2)
         
-        fig1=plt.figure(num=2, figsize = (5, 2))
+        fig1=plt.figure( figsize = (5, 2))
         fig1.clf()
         
         ax1=fig1.add_subplot(111)
-        fig1.suptitle('Inverted image XZ projection')
+        fig1.suptitle(f'Inverted image XZ projection (base: {self.base})')
         xz = ax1.imshow(inverted_xz, cmap = 'gray', aspect = 30, interpolation = 'none') #aspect = 12.82
         ax1.set_xlabel('x (px)')
         ax1.set_ylabel('z (px)')
@@ -172,6 +192,8 @@ class coherentSVIM_analysis:
         cbar.ax.set_ylabel('Counts', rotation=270)
         
     def show_inverted3D(self):
+        
+        # TODO: make work
         
         from pyqtgraph.Qt import QtCore, QtGui
         import pyqtgraph.opengl as gl
@@ -206,27 +228,38 @@ class coherentSVIM_analysis:
 if __name__ == "__main__" :
     
 
+        #   ----  1 ----- 
+        # file_name = '/Users/marcovitali/Documents/Poli/tesi/ScopeFoundy/coherentSVIM/data/data_28_4_22/220428_124841_coherent_SVIM_phantom2_good.h5'
+        #   ----  2 ----- 
+        # file_name = '/Users/marcovitali/Documents/Poli/tesi/ScopeFoundy/coherentSVIM/data/data_28_4_22/220428_124222_coherent_SVIM_phantom2_good.h5'
+        #   ----  3 ----- 
+        # file_name = '/Users/marcovitali/Documents/Poli/tesi/ScopeFoundy/coherentSVIM/data/data_28_4_22/220428_125643_coherent_SVIM_phantom2_good.h5'
+        #   ----  4 ----- 
+        file_name = '/Users/marcovitali/Documents/Poli/tesi/ScopeFoundy/coherentSVIM/data/data_28_4_22/220428_115143_coherent_SVIM_phantom2_good.h5'
         
-        # file_name = '/Users/marcovitali/Documents/Poli/tesi/ScopeFoundy/coherentSVIM/data/220422_174325_coherent_SVIM.h5'
-        file_name = '/Users/marcovitali/Documents/Poli/tesi/ScopeFoundy/coherentSVIM/data/data_22_4/220422_180920_coherent_SVIM_phantom1.h5'
         
         # file_name_h5 = file_name + '.h5'
         
         dataset = coherentSVIM_analysis(file_name)
         dataset.load_h5_file()
-        dataset.remove_dark_counts()
+        
+        
+        dataset.merge_pos_neg()
         # dataset.setROI(594,  306, 963)
         # dataset.show_im_raw()
         
         dataset.choose_freq(24)
-        dataset.invert(base = 'sq')
+        dataset.invert(base = 'cos')
         dataset.show_inverted_xy()
         dataset.show_inverted_xz()
         
+        dataset.invert(base = 'sq')
+        dataset.show_inverted_xz()
         
+        dataset.invert(base = 'sp_dct')
+        dataset.show_inverted_xz()
         
-        # # save_file = '/Users/marcovitali/Documents/Poli/tesi/ScopeFoundy/coherentSVIM/data/220422_174325_coherent_SVIM_inverted.tif'
-        # save_file = '/Users/marcovitali/Documents/Poli/tesi/ScopeFoundy/coherentSVIM/data/data_22_4/220422_180920_coherent_SVIM_phantom1_inverted.tif'        
+        # save_file = 'Users/marcovitali/Documents/Poli/tesi/ScopeFoundy/coherentSVIM/data/data_28_4_22/220428_124841_coherent_SVIM_phantom2_good_inverted.tif'        
         
         # try:
         #     os.remove(save_file)

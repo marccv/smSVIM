@@ -13,10 +13,10 @@ import matplotlib.pyplot as plt
 
 
 Y = np.zeros([1,100])
-Y[0,4] = 1
+Y[0,0] = 1
 # Y[0,3] = 0.5
 
-y = sp_fft.idct(Y)
+y = sp_fft.idct(Y, norm = 'ortho')
 
 
 
