@@ -17,6 +17,8 @@ class dct_6090:
     
     def __init__(self, disp_f):
         
+        # It receives the actual frequencies used to illuminate the sample
+        
         self.N = len(disp_f)
         self.disp_f = disp_f
 
@@ -41,6 +43,8 @@ class dct_6090:
         #     ax1.plot(self.x, self.matrix[i,:], '-o')
         
     def create_matrix_sq(self):
+        
+        # We perform the following steps to create a sq wave with freq = 0, period = inf
         
         temp = self.K
         temp[0,:] = 0.1* np.ones([1,self.N])
@@ -72,34 +76,50 @@ if __name__ == '__main__':
     
     import scipy.fftpack as sp_fft
     
+    
+    #actual frequncies displayed on the DMD. Normally they are recalculated while performing the image inversion (reading parameters from the H5 file)
     disp_f  = np.array([0, 0.5, 1.0, 1.5037593984962405, 2.0, 2.5, 3.0303030303030303, 3.508771929824561, 4.0, 4.545454545454546, 5.0, 5.555555555555555, 6.0606060606060606, 6.666666666666667, 7.142857142857143, 7.6923076923076925, 8.0, 8.695652173913043, 9.090909090909092, 9.523809523809524, 10.0, 10.526315789473685, 11.11111111111111, 11.764705882352942])
     
+    
+    # Creation of the transform object
     tras = dct_6090(disp_f)
     tras.create_space()
     
-    # base = 'cos'
-    base = 'sq'
+    
+    
+    base = 'cos'
+    # base = 'sq'
     
     
     if base == 'cos':
-        tras.create_matrix_cos()
+        tras.create_matrix_cos() # the direct matrix is now in tras.matrix
     elif base == 'sq':
-        tras.create_matrix_sq()
+        tras.create_matrix_sq() # the direct matrix is now in tras.matrix
     
-    tras.compute_inverse()
+    tras.compute_inverse() # the inverse matrix is now in tras.inv_matrix
     
-    # x = np.array([0,0,0,0,0,0,0,0,0,0,1,3,5,9,10,9,5,3,1,0,0,0,0,0])
+    
+    
+    
+    # Test signal
     x = np.array([0,0,0,0,0,0,0,0,0,0,0,0,1,9,10,9,1,0,0,0,0,0,0,0])
     
     
+    
+    
+    
+    # Noiseless spectrum
     y = np.matmul(tras.matrix,x)
     err_on_y = False
     
-    sigma = 0
-    offset = 0.4
-    # offset = 0 # with PosNeg I remove darkcounts
+    sigma = 0.3
+    # offset = 0.4
+    offset = 0 # with PosNeg I remove darkcounts
     error_1D = np.random.normal(loc = 1, scale = sigma, size = y.shape)
     error_2D = np.random.normal(loc = 1, scale = sigma, size = tras.matrix.shape)
+    
+    
+    
     
     # ----------------------------------
     #  I add error to the direct matrix
@@ -115,25 +135,32 @@ if __name__ == '__main__':
     # ax1.set_xlabel('x', fontsize = 12)
     # for i in range(4):
     #     ax1.plot( m_dir_with_e[i,:], '-o')
+    
+    
+    
     # --------------------------------------
     #  I add error to the measured spectrum
     # --------------------------------------
     
-    
     y_with_e = np.multiply(y + max(y)*offset, error_1D)
-    # y_with_e =y + max(y)*offset
     err_on_y = True
     
     
     # ----------------------------------
+    # SCIPY DCT
     
     if err_on_y:
         
         y_dct = sp_fft.dct(x, norm = 'ortho')
         y_dct_e = np.multiply(y_dct + max(y_dct)*offset, error_1D)
-        x_prime_dct = sp_fft.idct(y_dct_e, norm = 'ortho')
-    
-    
+        
+        # >> To perform the DCT inversion on the DCT spectrum
+        # x_prime_dct = sp_fft.idct(y_dct_e, norm = 'ortho')
+        
+        # >> To perform the DCT inversion on the cos or sq spectrum
+        x_prime_dct = sp_fft.idct(y_with_e, norm = 'ortho')
+        
+        
     # ----------------------------------
     
     
@@ -144,8 +171,11 @@ if __name__ == '__main__':
         
         x_prime_inv = np.matmul(tras.inv_matrix, y_with_e)
         x_prime_solve = np.linalg.solve(tras.matrix, y_with_e)
-        x_prime_lstsq = np.linalg.lstsq(tras.matrix, y_with_e, rcond = None)[0]
+        # x_prime_lstsq = np.linalg.lstsq(tras.matrix, y_with_e, rcond = None)
+        x_prime_lstsq ,_,_,_= np.linalg.lstsq(tras.matrix, y_with_e, rcond = None)
     
+    
+    x_prime_dct *= max(x_prime_inv)/max(x_prime_dct) # rescale the DCT inverted x
     
     rec_e_inv = np.linalg.norm(x-x_prime_inv, 2)
     rec_e_solve = np.linalg.norm(x - x_prime_solve, 2)
@@ -153,10 +183,10 @@ if __name__ == '__main__':
     rec_e_lstsq = np.linalg.norm(x-x_prime_lstsq, 2)
     
     
-    print(f'Error with custom base {base}, inverse matrix: {rec_e_inv:.5e}')
-    print(f'Error with custom base {base}, np solve: {rec_e_solve:.5e}')
-    print(f'Error with custom base {base}, np lstsq: {rec_e_lstsq:.5e}')
-    print(f'Error with scipy DCT: {rec_e_dct:.5e}')
+    print(f'>> L2 norm errors <<\n{base} base, inverse:  {rec_e_inv:.5e}')
+    print(f'{base} base, np solve: {rec_e_solve:.5e}')
+    print(f'{base} base, np lstsq: {rec_e_lstsq:.5e}')
+    print(f'Scipy DCT:         {rec_e_dct:.5e}')
     
     fig2, (ax1, ax2) =plt.subplots(2, 1, gridspec_kw={'height_ratios': [ 3, 5]}, constrained_layout=True)
     # fig2.clf()

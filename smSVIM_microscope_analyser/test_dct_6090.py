@@ -1,8 +1,9 @@
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
 Created on Fri Apr 22 15:25:23 2022
 
-@author: SPIM-OPT
+@author: marcovitali
 """
 
 import numpy as np
@@ -249,6 +250,7 @@ if __name__ == "__main__" :
         # dataset.show_im_raw()
         
         dataset.choose_freq(24)
+        
         dataset.invert(base = 'cos')
         dataset.show_inverted_xy()
         dataset.show_inverted_xz()

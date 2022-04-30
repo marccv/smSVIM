@@ -42,18 +42,29 @@ import numpy as np
 
 
 
-a = np.array([[[10,11],[12,13]],[[14,15],[16,17]] , [[12,11],[12,116]],[[14,15],[16,17]] ])
-print('\na\n', a)
+# a = np.array([[[10,11],[12,13]],[[14,15],[16,17]] , [[12,11],[12,116]],[[14,15],[16,17]] ])
+# print('\na\n', a)
 
-num_frames = a.shape[0]
-print(f'num_frames = {num_frames}')
+# num_frames = a.shape[0]
+# print(f'num_frames = {num_frames}')
 
-pos = a[np.linspace(0, num_frames -2, int(num_frames/2), dtype = 'int'), :, :]
-neg = a[np.linspace(1, num_frames -1, int(num_frames/2), dtype = 'int'), :, :]
+# pos = a[np.linspace(0, num_frames -2, int(num_frames/2), dtype = 'int'), :, :]
+# neg = a[np.linspace(1, num_frames -1, int(num_frames/2), dtype = 'int'), :, :]
 
-print('\npos\n', pos)
-print('\nneg\n', neg)
+# print('\npos\n', pos)
+# print('\nneg\n', neg)
 
 
-b = pos - neg
-print('\nb\n', b)
+# b = pos - neg
+# print('\nb\n', b)
+
+
+import scipy
+import scipy.misc
+import matplotlib.pyplot as plt
+
+f = scipy.misc.face()
+
+fig1 , ax1 = plt.subplots()
+
+ax1.imshow(f)
