@@ -82,11 +82,12 @@ class coherentSVIM_analysis:
         
         self.imageRaw = self.imageRaw[:, x_min :x_min +ROIsize, y_min: y_min+ROIsize]
         
-    def choose_freq(self, N):
+    def choose_freq(self, N = None):
         
         f_start = get_h5_attr(self.filename, 'f_min')[0]
         f_stop = get_h5_attr(self.filename, 'f_max')[0]
         ROI_s_z = get_h5_attr(self.filename, 'ROI_s_z')[0]
+        self.ROI_s_z = ROI_s_z
         
         freqs = np.linspace(f_start, f_stop, int(2*(f_stop - f_start) + 1),dtype = float)
         disp_freqs = [0]
@@ -106,7 +107,7 @@ class coherentSVIM_analysis:
         # self.disp_freqs = np.array(disp_freqs)[mask]
     
         
-    def invert(self, base = 'sq'):
+    def invert(self, base = 'cos'):
         
         self.base = base
         
@@ -128,6 +129,23 @@ class coherentSVIM_analysis:
             dct_coeff[0,:,:] *= 1/np.sqrt(2)  # I rescale the cw illumination >> It just shifts the inverted image towards more negative values
             self.image_inv = sp_fft.idct(dct_coeff, type = 2, axis = 0, norm = 'ortho')
             
+            
+    def p_invert(self, base = 'cos'):
+        
+        self.base = base
+        
+        self.transform = t_6090.dct_6090(self.disp_freqs)
+        self.transform.create_space()
+        
+        if base == 'cos':
+            self.transform.create_matrix_cos()
+            self.transform.compute_pinv()
+            self.image_inv = np.tensordot(self.transform.pinv_matrix ,  self.imageRaw , axes=([1],[0]))
+            
+        elif base == 'sq':
+            self.transform.create_matrix_sq()
+            self.transform.compute_pinv()
+            self.image_inv = np.tensordot(self.transform.pinv_matrix ,  self.imageRaw , axes=([1],[0]))
         
         
     def show_inverted(self):
@@ -181,12 +199,15 @@ class coherentSVIM_analysis:
     def show_inverted_xz(self):
         inverted_xz = np.sum(self.image_inv, 2)
         
+        dmdPx_to_sample_ratio = 1
+        aspect_xz = (self.ROI_s_z * dmdPx_to_sample_ratio / len(self.disp_freqs))/0.65
+        
         fig1=plt.figure( figsize = (5, 2))
         fig1.clf()
         
         ax1=fig1.add_subplot(111)
         fig1.suptitle(f'Inverted image XZ projection (base: {self.base})')
-        xz = ax1.imshow(inverted_xz, cmap = 'gray', aspect = 30, interpolation = 'none') #aspect = 12.82
+        xz = ax1.imshow(inverted_xz, cmap = 'gray', aspect = aspect_xz, interpolation = 'none') #aspect = 12.82 for 24 z pixels, aspect = 6.6558 for 61 z pixels, aspect = 11.80 for tests in 61px, aspect = 30 for testing in 24 px
         ax1.set_xlabel('x (px)')
         ax1.set_ylabel('z (px)')
         cbar = fig1.colorbar(xz, ax = ax1, shrink=0.6, format='%.0e')
@@ -249,13 +270,13 @@ if __name__ == "__main__" :
         # dataset.setROI(594,  306, 963)
         # dataset.show_im_raw()
         
-        dataset.choose_freq(24)
+        dataset.choose_freq(61)
         
-        dataset.invert(base = 'cos')
-        dataset.show_inverted_xy()
+        dataset.p_invert(base = 'cos')
+        # dataset.show_inverted_xy()
         dataset.show_inverted_xz()
         
-        dataset.invert(base = 'sq')
+        dataset.p_invert(base = 'sq')
         dataset.show_inverted_xz()
         
         dataset.invert(base = 'sp_dct')

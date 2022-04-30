@@ -67,7 +67,19 @@ class dct_6090:
         
         print(f'\nCondition number:  {cond:.5e}\n')
         
-        self.inv_matrix = np.linalg.inv(self.matrix)
+        try:
+            self.inv_matrix = np.linalg.inv(self.matrix)
+        except:
+            print('Warning: singular matrix')
+            
+    def compute_pinv(self):
+        
+        rcond_pinv = 0.1
+        cond = np.linalg.cond(self.matrix)
+        print(f'\nDirect matrix condition number:  {cond:.5e}\nP_inv rcond = {rcond_pinv}\n')
+        
+        self.pinv_matrix = np.linalg.pinv(self.matrix, rcond = rcond_pinv)
+        
     
 # =====================================================================================
 # =====================================================================================
@@ -78,11 +90,13 @@ if __name__ == '__main__':
     
     
     #actual frequncies displayed on the DMD. Normally they are recalculated while performing the image inversion (reading parameters from the H5 file)
-    disp_f  = np.array([0, 0.5, 1.0, 1.5037593984962405, 2.0, 2.5, 3.0303030303030303, 3.508771929824561, 4.0, 4.545454545454546, 5.0, 5.555555555555555, 6.0606060606060606, 6.666666666666667, 7.142857142857143, 7.6923076923076925, 8.0, 8.695652173913043, 9.090909090909092, 9.523809523809524, 10.0, 10.526315789473685, 11.11111111111111, 11.764705882352942])
-    
+    disp_f  = np.array([0, 0.5, 1.0, 1.5037593984962405, 2.0, 2.5, 3.0303030303030303, 3.508771929824561, 4.0, 4.545454545454546, 5.0, 5.555555555555555, 6.0606060606060606, 6.666666666666667, 7.142857142857143, 7.6923076923076925, 8.0, 8.695652173913043, 9.090909090909092, 9.523809523809524, 10.0, 10.526315789473685, 11.11111111111111, 11.764705882352942, 12.5, 12.5, 13.333333333333334, 14.285714285714286, 14.285714285714286, 15.384615384615385, 15.384615384615385, 16.666666666666668, 16.666666666666668, 16.666666666666668, 18.181818181818183, 18.181818181818183, 18.181818181818183, 20.0, 20.0, 20.0, 20.0, 22.22222222222222, 22.22222222222222, 22.22222222222222, 22.22222222222222, 25.0, 25.0, 25.0, 25.0, 25.0, 25.0, 28.571428571428573, 28.571428571428573, 28.571428571428573, 28.571428571428573, 28.571428571428573, 28.571428571428573, 28.571428571428573, 33.333333333333336, 33.333333333333336, 33.333333333333336])
     
     # Creation of the transform object
-    tras = dct_6090(disp_f)
+    
+    N = 61
+    
+    tras = dct_6090(disp_f[0:N])
     tras.create_space()
     
     
@@ -97,13 +111,12 @@ if __name__ == '__main__':
         tras.create_matrix_sq() # the direct matrix is now in tras.matrix
     
     tras.compute_inverse() # the inverse matrix is now in tras.inv_matrix
-    
+    tras.compute_pinv()
     
     
     
     # Test signal
-    x = np.array([0,0,0,0,0,0,0,0,0,0,0,0,1,9,10,9,1,0,0,0,0,0,0,0])
-    
+    x = np.exp( - ((tras.x - 0.62)**2)/0.001 )
     
     
     
@@ -166,38 +179,43 @@ if __name__ == '__main__':
     
     if not err_on_y:
         x_prime_inv = np.matmul(tras.inv_matrix,y)
-        x_prime_solve = np.linalg.solve(tras.matrix, y_with_e)
+        x_prime_lstsq ,_,_,_= np.linalg.lstsq(tras.matrix, y, rcond = None)
+        x_prime_pinv = np.matmul(tras.pinv_matrix, y)
     else:
         
-        x_prime_inv = np.matmul(tras.inv_matrix, y_with_e)
-        x_prime_solve = np.linalg.solve(tras.matrix, y_with_e)
-        # x_prime_lstsq = np.linalg.lstsq(tras.matrix, y_with_e, rcond = None)
-        x_prime_lstsq ,_,_,_= np.linalg.lstsq(tras.matrix, y_with_e, rcond = None)
+        # x_prime_inv = np.matmul(tras.inv_matrix, y_with_e)
+        # x_prime_solve = np.linalg.solve(tras.matrix, y_with_e)
+        x_prime_lstsq ,_,_,_= np.linalg.lstsq(tras.matrix, y_with_e, rcond = 0.1)
+        x_prime_pinv = np.matmul(tras.pinv_matrix, y_with_e)
     
     
-    x_prime_dct *= max(x_prime_inv)/max(x_prime_dct) # rescale the DCT inverted x
+    x_prime_dct *= max(x_prime_lstsq)/max(x_prime_dct) # rescale the DCT inverted x
     
-    rec_e_inv = np.linalg.norm(x-x_prime_inv, 2)
-    rec_e_solve = np.linalg.norm(x - x_prime_solve, 2)
+    # rec_e_inv = np.linalg.norm(x-x_prime_inv, 2)
+    # rec_e_solve = np.linalg.norm(x - x_prime_solve, 2)
     rec_e_dct = np.linalg.norm(x-x_prime_dct, 2)
     rec_e_lstsq = np.linalg.norm(x-x_prime_lstsq, 2)
+    rec_e_pinv = np.linalg.norm(x-x_prime_pinv, 2)
     
     
-    print(f'>> L2 norm errors <<\n{base} base, inverse:  {rec_e_inv:.5e}')
-    print(f'{base} base, np solve: {rec_e_solve:.5e}')
+    # print(f'>> L2 norm errors <<\n{base} base, inverse:  {rec_e_inv:.5e}')
+    # print(f'{base} base, np solve: {rec_e_solve:.5e}')
     print(f'{base} base, np lstsq: {rec_e_lstsq:.5e}')
-    print(f'Scipy DCT:         {rec_e_dct:.5e}')
+    print(f'Scipy DCT:          {rec_e_dct:.5e}')
+    print(f'{base} base, Pinv:     {rec_e_pinv:.5e}')
     
     fig2, (ax1, ax2) =plt.subplots(2, 1, gridspec_kw={'height_ratios': [ 3, 5]}, constrained_layout=True)
     # fig2.clf()
     ax1.plot( y,'o', color = 'C0', label = 'Noiseless Spectrum')
     if err_on_y: ax1.plot( y_with_e,'D', color = 'C1', label = f'With noise (s = {sigma})')
-    ax1.set_ylim([-50,70])
+    # ax1.set_ylim([-50,70])
     ax1.set_xlabel('frequency component number', fontsize = 12)
     ax1.legend(fontsize = 10)
     
     ax2.plot(tras.x, x,'-o', color = 'C0', label = 'Original dist.')
-    ax2.plot(tras.x, x_prime_inv,'--o', color = 'C3', markersize = 6, label = f'Inverted dist. (base: {base})')
+    ax2.plot(tras.x, x_prime_lstsq,'--o', color = 'C3', markersize = 6, label = f'Inverted LSQR (base: {base})')
+    ax2.plot(tras.x, x_prime_pinv,'--x', color = 'C4', markersize = 6, label = f'Pseudo Inv dist. (base: {base})')
+    
     if err_on_y: ax2.plot(tras.x, x_prime_dct,'--D', color = 'C6', markersize = 4, label = 'DCT inversion')
     ax2.set_xlabel('x', fontsize = 12)
     ax2.legend(fontsize = 10)
