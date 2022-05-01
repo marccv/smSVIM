@@ -11,18 +11,35 @@ import transform_6090 as t_6090
 import scipy.fftpack as sp_fft
 from get_h5_data import get_h5_dataset, get_h5_attr
 import tifffile as tiff
-import os
+import time
 import matplotlib.pyplot as plt
 plt.rcParams['figure.dpi'] = 300
 plt.rcParams.update({'font.size': 7})
 
+from skimage.restoration import denoise_tv_chambolle
 
 import sys
 import pyqtgraph as pg
 import qtpy.QtCore
 from qtpy.QtWidgets import QApplication
 
-# file_name="D:\\LabPrograms\\ScopeFoundry_POLIMI\\smSVIM_Microscope\\data\\220422_124826_coherent_SVIM.h5"
+
+
+def time_it(method):
+    """Fucntion decorator to time a methos""" 
+       
+    def inner(*args,**kwargs):
+        
+        start_time = time.time() 
+        result = method(*args, **kwargs) 
+        end_time = time.time()
+        print(f'Execution time for method "{method.__name__}": {end_time-start_time:.6f} s \n') 
+        return result        
+    return inner
+
+
+
+
 
 class coherentSVIM_analysis:
     
@@ -36,7 +53,7 @@ class coherentSVIM_analysis:
         
         self.filename  = fname
         
-        
+    @time_it   
     def load_h5_file(self):
         
         self.imageRaw = get_h5_dataset(self.filename) #TODO read h5 info
@@ -56,6 +73,7 @@ class coherentSVIM_analysis:
    
         sys.exit ( "End of test")
         
+    @time_it    
     def show_im_raw_cc(self):
         
         fig1=plt.figure()
@@ -68,7 +86,8 @@ class coherentSVIM_analysis:
         ax1.set_ylabel('y (px)')
         cbar = fig1.colorbar(xy, ax = ax1, shrink=1, format='%.0e')
         cbar.ax.set_ylabel('Counts', rotation=270)
-        
+    
+    @time_it
     def merge_pos_neg(self):
         
         num_frames = self.imageRaw.shape[0]
@@ -78,10 +97,20 @@ class coherentSVIM_analysis:
         
         self.imageRaw = pos - neg
     
-    def setROI(self, x_min, y_min, ROIsize):
+    @time_it
+    def setROI(self, x_min, y_min, ROIsize, ROIsize_y = None):
         
-        self.imageRaw = self.imageRaw[:, x_min :x_min +ROIsize, y_min: y_min+ROIsize]
+        '''
+        Defines the ROI size
+        If ROIsize_y is not provided the ROI becomes a square of side ROIsize
+        '''
         
+        if ROIsize_y == None:
+            ROIsize_y = ROIsize
+        
+        self.imageRaw = self.imageRaw[:, x_min :x_min +ROIsize, y_min: y_min+ROIsize_y]
+    
+    @time_it
     def choose_freq(self, N = None):
         
         f_start = get_h5_attr(self.filename, 'f_min')[0]
@@ -106,7 +135,7 @@ class coherentSVIM_analysis:
         # self.imageRaw = self.imageRaw[mask, :, :]
         # self.disp_freqs = np.array(disp_freqs)[mask]
     
-        
+    @time_it    
     def invert(self, base = 'cos'):
         
         self.base = base
@@ -128,9 +157,16 @@ class coherentSVIM_analysis:
             dct_coeff = self.imageRaw
             dct_coeff[0,:,:] *= 1/np.sqrt(2)  # I rescale the cw illumination >> It just shifts the inverted image towards more negative values
             self.image_inv = sp_fft.idct(dct_coeff, type = 2, axis = 0, norm = 'ortho')
-            
-            
+        
+        self.denoised = False
+        self.clipped = False
+    
+    @time_it        
     def p_invert(self, base = 'cos'):
+        
+        '''
+        Inverts the raw image using the the matrix pseudoinverse with rcond = 10
+        '''
         
         self.base = base
         
@@ -147,7 +183,33 @@ class coherentSVIM_analysis:
             self.transform.compute_pinv()
             self.image_inv = np.tensordot(self.transform.pinv_matrix ,  self.imageRaw , axes=([1],[0]))
         
+        self.denoised = False
+        self.clipped = False
+    
+    @time_it
+    def denoise(self, weight = 1000):
         
+        shape = self.image_inv.shape
+        self.denoise_w = 'linear'
+        if self.base == 'cos':
+            ratio = 0.1193
+        elif self.base == 'sq':
+            ratio = 0.20439
+        
+        for i in range(shape[1]):
+            for j in range(shape[2]):
+                
+                weight = max(self.image_inv[:,i,j]) * ratio
+                self.image_inv[:,i,j] = denoise_tv_chambolle(self.image_inv[:,i,j], weight)
+        
+        self.denoised = True
+    
+    @time_it
+    def cut_negatives(self):
+        
+        self.image_inv = self.image_inv.clip(min = 0)
+        self.clipped = True
+    
     def show_inverted(self):
         pg.image(self.image_inv, title= f"Inverted image (base: {self.base})")        
                
@@ -157,7 +219,8 @@ class coherentSVIM_analysis:
                           
    
         sys.exit ( "End of test")
-        
+    
+    @time_it
     def show_inverted_proj(self):
         
         inverted_xy = np.sum(self.image_inv, 0)
@@ -169,7 +232,7 @@ class coherentSVIM_analysis:
         
         fig1, (ax1, ax2) =plt.subplots(2, 1, gridspec_kw={'height_ratios': [ 4, 1]})
         # fig1.clf()
-        fig1.text(0.1,0.2, f'Inverted image projections (base: {self.base})')
+        fig1.text(0.1,0.2, f'Inverted image projections (base: {self.base}, denoised: {self.denoised})')
         
         xy = ax1.imshow(inverted_xy.transpose(), cmap = 'gray', aspect = 1, vmin = c_min, vmax = c_max)
         ax1.set_xlabel('x (px)')
@@ -182,36 +245,44 @@ class coherentSVIM_analysis:
         ax2.set_ylabel('z (px)')
         # fig1.colorbar(xz, ax = ax1)
         
-        
+    @time_it    
     def show_inverted_xy(self):
         inverted_xy = np.sum(self.image_inv, 0)
         
         fig1=plt.figure()
         fig1.clf()
-        fig1.suptitle(f'Inverted image XY projection (base: {self.base})')
+        fig1.suptitle(f'Inverted image XY projection (base: {self.base}, denoised: {self.denoised})')
         ax1=fig1.add_subplot(111)
         xy = ax1.imshow(inverted_xy.transpose(), cmap = 'gray', aspect = 1)
         ax1.set_xlabel('x (px)')
         ax1.set_ylabel('y (px)')
         cbar = fig1.colorbar(xy, ax = ax1, format='%.0e')
         cbar.ax.set_ylabel('Counts', rotation=270)
-        
+    
+    @time_it
     def show_inverted_xz(self):
         inverted_xz = np.sum(self.image_inv, 2)
         
-        dmdPx_to_sample_ratio = 1
+        dmdPx_to_sample_ratio = 1 # (um/px)
         aspect_xz = (self.ROI_s_z * dmdPx_to_sample_ratio / len(self.disp_freqs))/0.65
         
-        fig1=plt.figure( figsize = (5, 2))
+        # fig1=plt.figure( figsize = (3, 6) , constrained_layout=True) 
+        fig1=plt.figure( constrained_layout=True) 
         fig1.clf()
         
         ax1=fig1.add_subplot(111)
-        fig1.suptitle(f'Inverted image XZ projection (base: {self.base})')
+        fig1.suptitle('Inverted image XZ projection')
+        
+        if not hasattr(self, 'denoise_w'):
+            self.denoise_w = None
+        
+        ax1.set_title(f'Base: {self.base}, Denoised: {self.denoised} (w = {self.denoise_w}), clipped = {self.clipped}', fontsize = 10)
         xz = ax1.imshow(inverted_xz, cmap = 'gray', aspect = aspect_xz, interpolation = 'none') #aspect = 12.82 for 24 z pixels, aspect = 6.6558 for 61 z pixels, aspect = 11.80 for tests in 61px, aspect = 30 for testing in 24 px
         ax1.set_xlabel('x (px)')
         ax1.set_ylabel('z (px)')
-        cbar = fig1.colorbar(xz, ax = ax1, shrink=0.6, format='%.0e')
+        cbar = fig1.colorbar(xz, ax = ax1, shrink=0.5, format='%.0e')
         cbar.ax.set_ylabel('Counts', rotation=270)
+    
         
     def show_inverted3D(self):
         
@@ -267,20 +338,40 @@ if __name__ == "__main__" :
         
         
         dataset.merge_pos_neg()
-        # dataset.setROI(594,  306, 963)
+        # dataset.setROI(814-40,  1132-40, 80)
+        dataset.setROI(420,  524, 1000)
         # dataset.show_im_raw()
         
-        dataset.choose_freq(61)
+        dataset.choose_freq()
         
-        dataset.p_invert(base = 'cos')
+        base = 'cos'
+        dataset.p_invert(base)
+        dataset.show_inverted_xy()
+        dataset.show_inverted_xz()
+        
+        #%% 
+        
+        dataset.denoise()
         # dataset.show_inverted_xy()
         dataset.show_inverted_xz()
         
-        dataset.p_invert(base = 'sq')
+        # %%
+        # dataset.cut_negatives()
         dataset.show_inverted_xz()
         
-        dataset.invert(base = 'sp_dct')
-        dataset.show_inverted_xz()
+        # base = 'sq'
+        # dataset.p_invert(base)
+        # dataset.show_inverted_xz()
+        
+        # base = 'sp_dct'
+        # dataset.invert(base )
+        # dataset.show_inverted_xz()
+        
+        
+        
+        
+        
+        
         
         # save_file = 'Users/marcovitali/Documents/Poli/tesi/ScopeFoundy/coherentSVIM/data/data_28_4_22/220428_124841_coherent_SVIM_phantom2_good_inverted.tif'        
         
@@ -291,6 +382,93 @@ if __name__ == "__main__" :
             
             
         # dataset.save_inverted(save_file)
+        
+        
+        #%%
+        # ===================================
+        #              TV tests
+        # ===================================
+        
+        
+        
+        
+        line = dataset.image_inv[:,40,40]
+        
+        fig1, ax1 = plt.subplots(1,1)
+        ax1.plot(line, '--', label = f'inverted pixel ({base})')
+        ax1.set_xlabel('z (px)')
+        
+        # # ------------------------------------
+        # # PYLOPS
+        
+        # import pylops
+        # nz = len(line)
+        # Iop = pylops.Identity(nz)
+        
+        # D2op = pylops.SecondDerivative(nz, edge=True)
+        # lamda = 20
+        
+        # line_smooth_pylops_1 = pylops.optimization.leastsquares.RegularizedInversion(
+        #     Iop, [D2op], line, epsRs=[np.sqrt(lamda / 2)], **dict(iter_lim=300)
+        # )
+        
+        # ax1.plot(line_smooth_pylops_1, '-',label  = f'Smoothed pylops TV, lambda = {lamda}')
+        # # ax1.legend()
+        
+        # lamda = 5
+        
+        # line_smooth_pylops_2 = pylops.optimization.leastsquares.RegularizedInversion(
+        #     Iop, [D2op], line, epsRs=[np.sqrt(lamda / 2)], **dict(iter_lim=300)
+        # )
+        
+        # ax1.plot(line_smooth_pylops_2,  '--', linewidth = 1, color = 'C1',label  = f'Smoothed pylops TV, lambda = {lamda}')
+        
+        # # ------------------------------------
+        # # Sk-Image chambolle
+        
+        # from skimage.restoration import denoise_tv_chambolle
+        # weight = max(line) * 0.1193 # cos
+        weight = max(line) * 0.20439  #sq
+        eps = 2e-4
+        max_iter = 150
+        
+        t = time.time()
+        
+        reps= 1000
+        for i in range(reps):
+        
+            line_smooth_skimage_1 = denoise_tv_chambolle(line, weight, eps, max_iter)
+            
+        print(f'time for single line: {(time.time() - t)/reps}s')
+        
+        ax1.plot(line_smooth_skimage_1, color = 'C2' , label  = f'Chambolle sk-image TV, weight = {weight}')
+    
+        weight = 300
+        
+        line_smooth_skimage_2 = denoise_tv_chambolle(line, weight)
+        ax1.plot(line_smooth_skimage_2,'--', color = 'C2', linewidth = 1, label  = f'Chambolle sk-image TV, weight = {weight}')
+        
+        ax1.legend()
+        
+        
+        
+        # # ------------------------------------
+        # # Sk-Image chambolle
+        
+        # from skimage.restoration import denoise_tv_bregman
+        # weight = 100
+        
+        # line_smooth_skimage_1 = denoise_tv_bregman(line, weight)
+        # ax1.plot(line_smooth_skimage_1, label  = f'Bregman sk-image TV, weight = {weight}')
+        
+        # # weight = 300
+        
+        # # line_smooth_skimage_2 = denoise_tv_bregman(line, weight)
+        # # ax1.plot(line_smooth_skimage_2,'--', color = 'C3', linewidth = 1, label  = f'Bregman sk-image TV, weight = {weight}')
+        
+        # ax1.legend()
+        
+        
         
         
         
