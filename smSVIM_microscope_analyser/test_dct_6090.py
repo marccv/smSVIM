@@ -338,8 +338,8 @@ if __name__ == "__main__" :
         
         
         dataset.merge_pos_neg()
-        # dataset.setROI(814-40,  1132-40, 80)
-        dataset.setROI(420,  524, 1000)
+        dataset.setROI(814-40,  1132-40, 80)
+        # dataset.setROI(420,  524, 1000)
         # dataset.show_im_raw()
         
         dataset.choose_freq()
@@ -386,7 +386,7 @@ if __name__ == "__main__" :
         
         #%%
         # ===================================
-        #              TV tests
+        #            1D  TV tests
         # ===================================
         
         
@@ -398,8 +398,8 @@ if __name__ == "__main__" :
         ax1.plot(line, '--', label = f'inverted pixel ({base})')
         ax1.set_xlabel('z (px)')
         
-        # # ------------------------------------
-        # # PYLOPS
+        # ------------------------------------
+        # PYLOPS L2 regularization
         
         # import pylops
         # nz = len(line)
@@ -413,7 +413,7 @@ if __name__ == "__main__" :
         # )
         
         # ax1.plot(line_smooth_pylops_1, '-',label  = f'Smoothed pylops TV, lambda = {lamda}')
-        # # ax1.legend()
+        # ax1.legend()
         
         # lamda = 5
         
@@ -422,6 +422,60 @@ if __name__ == "__main__" :
         # )
         
         # ax1.plot(line_smooth_pylops_2,  '--', linewidth = 1, color = 'C1',label  = f'Smoothed pylops TV, lambda = {lamda}')
+        
+        
+        # ------------------------------------
+        # PYLOPS TV regularization
+        
+        
+          
+        import pylops
+        nz = len(line)
+        Iop = pylops.Identity(nz)
+        
+        Dop = pylops.FirstDerivative(nz, edge=True, kind="backward")
+        mu = 0.01
+        lamda = 4
+        niter_out = 50
+        niter_in = 3
+        
+        line_smooth_pylops_1, niter = pylops.optimization.sparsity.SplitBregman(
+            Iop,
+            [Dop],
+            line,
+            niter_out,
+            niter_in,
+            mu=mu,
+            epsRL1s=[lamda],
+            tol=1e-4,
+            tau=1.0,
+            **dict(iter_lim=30, damp=1e-10)
+        )
+
+        
+        ax1.plot(line_smooth_pylops_1, '-',label  = f'Bregman pylops TV, lambda = {lamda}')
+        ax1.legend()
+        
+        mu = 0.01
+        lamda = 2
+        niter_out = 50
+        niter_in = 3
+        
+        line_smooth_pylops_2, niter = pylops.optimization.sparsity.SplitBregman(
+            Iop,
+            [Dop],
+            line,
+            niter_out,
+            niter_in,
+            mu=mu,
+            epsRL1s=[lamda],
+            tol=1e-4,
+            tau=1.0,
+            **dict(iter_lim=30, damp=1e-10)
+        )
+        
+        ax1.plot(line_smooth_pylops_2,  '--', linewidth = 1, color = 'C1',label  = f'Bregman pylops TV, lambda = {lamda}')
+        
         
         # # ------------------------------------
         # # Sk-Image chambolle
@@ -441,19 +495,19 @@ if __name__ == "__main__" :
             
         print(f'time for single line: {(time.time() - t)/reps}s')
         
-        ax1.plot(line_smooth_skimage_1, color = 'C2' , label  = f'Chambolle sk-image TV, weight = {weight}')
+        ax1.plot(line_smooth_skimage_1, color = 'C2' , label  = f'Chambolle sk-image TV, weight = {weight:.1f}')
     
-        weight = 300
+        # weight = 300
         
-        line_smooth_skimage_2 = denoise_tv_chambolle(line, weight)
-        ax1.plot(line_smooth_skimage_2,'--', color = 'C2', linewidth = 1, label  = f'Chambolle sk-image TV, weight = {weight}')
+        # line_smooth_skimage_2 = denoise_tv_chambolle(line, weight)
+        # ax1.plot(line_smooth_skimage_2,'--', color = 'C2', linewidth = 1, label  = f'Chambolle sk-image TV, weight = {weight:.1f}')
         
         ax1.legend()
         
         
         
         # # ------------------------------------
-        # # Sk-Image chambolle
+        # # Sk-Image bregman
         
         # from skimage.restoration import denoise_tv_bregman
         # weight = 100
@@ -471,6 +525,11 @@ if __name__ == "__main__" :
         
         
         
+        
+        #%%
+        # ===================================
+        #            1D  TV tests
+        # ===================================
         
         
         
