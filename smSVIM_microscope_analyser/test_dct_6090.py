@@ -20,6 +20,7 @@ from skimage.restoration import denoise_tv_chambolle
 
 import pylops
 from scipy.sparse.linalg import aslinearoperator
+from scipy.sparse.linalg import LinearOperator
 
 import sys
 import pyqtgraph as pg
@@ -208,6 +209,73 @@ class coherentSVIM_analysis:
         self.denoised = True
     
     
+    
+    
+    
+    
+    
+    
+    @time_it
+    def invert_and_denoise1D_no_for(self, base = 'sq', mu = 0.01, lamda = 0.3, niter_out = 50, niter_in = 3):
+        
+        self.base = base
+        
+        self.transform = t_6090.dct_6090(self.disp_freqs)
+        self.transform.create_space()
+    
+        if base == 'cos':
+            self.transform.create_matrix_cos()
+            
+        elif base == 'sq':
+            self.transform.create_matrix_sq()
+        
+        M = self.transform.matrix
+        # M = M.astype(float)
+        M = aslinearoperator(M.astype(float)) #scipy lin op
+        M = pylops.LinearOperator(M) # Pylops overload. They actually say that the end user should not use it
+        
+        # nz = len(self.disp_freqs)
+        shape = self.imageRaw.shape
+        
+        Dop = pylops.FirstDerivative(np.prod(shape), shape,  0, edge=True, kind="backward")
+        # mu = 0.01
+        # lamda = 0.3
+        # niter_out = 50
+        # niter_in = 3
+        
+        
+        print(shape)
+        # self.image_inv = np.zeros(shape)
+        t = time.time()
+        
+        self.image_inv, _ = pylops.optimization.sparsity.SplitBregman(
+                                    M,
+                                    [Dop],
+                                    self.imageRaw.ravel(),
+                                    niter_out,
+                                    niter_in,
+                                    mu=mu,
+                                    epsRL1s=[lamda],
+                                    tol=1e-4,
+                                    tau=1.0,
+                                    **dict(iter_lim=30, damp=1e-10)
+                                )
+        print(f'time for one line: {(time.time()  - t)/(shape[1] * shape[2])}')
+        
+        
+        self.image_inv.reshape(shape)
+        
+        self.denoised = True
+        self.clipped = False
+        
+        
+        
+        
+        
+        
+        
+        
+        
     @time_it
     def invert_and_denoise1D(self, base = 'sq', mu = 0.01, lamda = 0.3, niter_out = 50, niter_in = 3):
         
@@ -257,6 +325,163 @@ class coherentSVIM_analysis:
         print(f'time for one line: {(time.time()  - t)/(shape[1] * shape[2])}')
         self.denoised = True
         self.clipped = False
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    @time_it
+    def invert_and_denoise3D(self, base = 'sq', mu = 0.01, lamda = 0.3, niter_out = 50, niter_in = 3):
+        
+        self.base = base
+        
+        self.transform = t_6090.dct_6090(self.disp_freqs)
+        self.transform.create_space()
+    
+        if base == 'cos':
+            self.transform.create_matrix_cos()
+            
+        elif base == 'sq':
+            self.transform.create_matrix_sq()
+        
+        shape = self.imageRaw.shape
+        
+        from scipy.linalg import block_diag
+        M = self.transform.matrix
+        M = block_diag(*([M] * (shape[1] * shape[2])))
+        
+        # M = M.astype(float)
+        M = aslinearoperator(M.astype(float)) #scipy lin op
+        M = pylops.LinearOperator(M) # Pylops overload. They actually say that the end user should not use it
+        
+        # nz = len(self.disp_freqs)
+        
+        
+        
+        Dop = [
+            pylops.FirstDerivative(np.prod(shape), shape,  0, edge=True, kind="backward"),
+            pylops.FirstDerivative(np.prod(shape), shape,  1, edge=True, kind="backward"),
+            pylops.FirstDerivative(np.prod(shape), shape,  2, edge=True, kind="backward")
+        ]
+        
+        # mu = 0.01
+        lamda = [lamda]*3
+        # niter_out = 50
+        # niter_in = 3
+        
+        
+        print(shape)
+        # self.image_inv = np.zeros(shape)
+        t = time.time()
+        
+        self.image_inv, _ = pylops.optimization.sparsity.SplitBregman(
+                                    M,
+                                    Dop,
+                                    self.imageRaw.ravel(),
+                                    niter_out,
+                                    niter_in,
+                                    mu=mu,
+                                    epsRL1s = lamda,
+                                    tol=1e-4,
+                                    tau=1.0,
+                                    **dict(iter_lim=30, damp=1e-10)
+                                )
+        print(f'time for one line: {(time.time()  - t)/(shape[1] * shape[2])}')
+        
+        
+        # self.image_inv.reshape(shape)
+        
+        self.denoised = True
+        self.clipped = False
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    @time_it
+    def invert_and_denoise3D_v2(self, base = 'sq', mu = 0.01, lamda = 0.3, niter_out = 50, niter_in = 3):
+        
+        self.base = base
+        
+        self.transform = t_6090.dct_6090(self.disp_freqs)
+        self.transform.create_space()
+    
+        if base == 'cos':
+            self.transform.create_matrix_cos()
+            
+        elif base == 'sq':
+            self.transform.create_matrix_sq()
+        
+        nz,ny,nx = self.imageRaw.shape
+        shape = (nz,ny,nx)
+        M = self.transform.matrix
+        M = M.astype(float)
+        
+        def Op(v):
+            v = v.reshape( nz, int(len(v)/nz))
+            return (M@v).ravel()
+        
+        
+        Op_s = LinearOperator((nz,nz), matvec = Op, dtype = float)
+        Op_s = pylops.LinearOperator(Op_s)
+        
+        
+        
+        Dop = [
+            pylops.FirstDerivative(np.prod(shape), shape,  0, edge=True, kind="backward"),
+            pylops.FirstDerivative(np.prod(shape), shape,  1, edge=True, kind="backward"),
+            pylops.FirstDerivative(np.prod(shape), shape,  2, edge=True, kind="backward")
+        ]
+        
+        # mu = 0.01
+        lamda = [lamda]*3
+        # niter_out = 50
+        # niter_in = 3
+        
+        
+        print(shape)
+        # self.image_inv = np.zeros(shape)
+        t = time.time()
+        
+        self.image_inv, _ = pylops.optimization.sparsity.SplitBregman(
+                                    Op_s,
+                                    Dop,
+                                    self.imageRaw.ravel(),
+                                    niter_out,
+                                    niter_in,
+                                    mu=mu,
+                                    epsRL1s = lamda,
+                                    tol=1e-4,
+                                    tau=1.0,
+                                    **dict(iter_lim=30, damp=1e-10)
+                                )
+        print(f'time for one line: {(time.time()  - t)/(shape[1] * shape[2])}')
+        
+        
+        # self.image_inv.reshape(shape)
+        
+        self.denoised = True
+        self.clipped = False
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
     
     @time_it
     def cut_negatives(self):
@@ -394,7 +619,7 @@ if __name__ == "__main__" :
         
         
         dataset.merge_pos_neg()
-        dataset.setROI(814,  1132, 1)
+        dataset.setROI(814-5,  1132-5, 10)
         # dataset.setROI(420,  524, 1000)
         # dataset.show_im_raw()
         
@@ -404,19 +629,22 @@ if __name__ == "__main__" :
         
         base = 'cos'
         mu = 0.01
-        lamda = 12
-        niter_out = 50
-        niter_in = 3
-        dataset.invert_and_denoise1D(base, mu, lamda, niter_out, niter_in)
+        lamda = 30
+        niter_out = 10
+        niter_in = 2
+        dataset.invert_and_denoise3D(base, mu, lamda, niter_out, niter_in)
         # dataset.show_inverted_xy()
         # dataset.show_inverted_xz()
         
+        #%%
+        
+        temp = dataset.image_inv.reshape(dataset.imageRaw.shape)
+        # temp = temp.transpose(0,2,1)
         
         fig, ax = plt.subplots()
-        ax.plot(dataset.image_inv[:,0,0], label = f'mu = {mu}, lambda = {lamda}\nNiter_out = {niter_out}, niter_in = {niter_in}')
+        ax.plot(temp[:,5,5], label = f'mu = {mu}, lambda = {lamda}\nNiter_out = {niter_out}, niter_in = {niter_in}')
         ax.legend()
         
-        #%% 
         
         # dataset.denoise()
         # dataset.show_inverted_xy()

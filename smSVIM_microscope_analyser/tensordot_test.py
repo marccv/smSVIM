@@ -59,12 +59,21 @@ import numpy as np
 # print('\nb\n', b)
 
 
-import scipy
-import scipy.misc
-import matplotlib.pyplot as plt
+# import scipy
+# import scipy.misc
+# import matplotlib.pyplot as plt
 
-f = scipy.misc.face()
+# f = scipy.misc.face()
 
-fig1 , ax1 = plt.subplots()
+# fig1 , ax1 = plt.subplots()
 
-ax1.imshow(f)
+# ax1.imshow(f)
+
+
+a = np.array([[[1, 2],[3,4]],[[5,6],[7,8]]])
+nz, ny, nx = a.shape
+print(a)
+
+
+print(a.reshape( nz, (nx*ny)))
+
