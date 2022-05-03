@@ -18,6 +18,9 @@ plt.rcParams.update({'font.size': 7})
 
 from skimage.restoration import denoise_tv_chambolle
 
+import pylops
+from scipy.sparse.linalg import aslinearoperator
+
 import sys
 import pyqtgraph as pg
 import qtpy.QtCore
@@ -136,7 +139,7 @@ class coherentSVIM_analysis:
         # self.disp_freqs = np.array(disp_freqs)[mask]
     
     @time_it    
-    def invert(self, base = 'cos'):
+    def invert(self, base = 'sq'):
         
         self.base = base
         
@@ -162,7 +165,7 @@ class coherentSVIM_analysis:
         self.clipped = False
     
     @time_it        
-    def p_invert(self, base = 'cos'):
+    def p_invert(self, base = 'sq'):
         
         '''
         Inverts the raw image using the the matrix pseudoinverse with rcond = 10
@@ -203,6 +206,57 @@ class coherentSVIM_analysis:
                 self.image_inv[:,i,j] = denoise_tv_chambolle(self.image_inv[:,i,j], weight)
         
         self.denoised = True
+    
+    
+    @time_it
+    def invert_and_denoise1D(self, base = 'sq', mu = 0.01, lamda = 0.3, niter_out = 50, niter_in = 3):
+        
+        self.base = base
+        
+        self.transform = t_6090.dct_6090(self.disp_freqs)
+        self.transform.create_space()
+    
+        if base == 'cos':
+            self.transform.create_matrix_cos()
+            
+        elif base == 'sq':
+            self.transform.create_matrix_sq()
+        
+        M = self.transform.matrix
+        M = M.astype(float)
+        # M = aslinearoperator(M.astype(float)) #scipy lin op
+        # M = pylops.LinearOperator(M) # Pylops overload. They actually say that the end user should not use it
+        
+        nz = len(self.disp_freqs)
+        
+        Dop = pylops.FirstDerivative(nz, edge=True, kind="backward")
+        # mu = 0.01
+        # lamda = 0.3
+        # niter_out = 50
+        # niter_in = 3
+        
+        shape = self.imageRaw.shape
+        print(shape)
+        self.image_inv = np.zeros(shape)
+        t = time.time()
+        for i in range(shape[1]):
+            for j in range(shape[2]):
+                print(i,j)
+                self.image_inv[:,i,j], _ = pylops.optimization.sparsity.SplitBregman(
+                                            M,
+                                            [Dop],
+                                            self.imageRaw[:,i,j],
+                                            niter_out,
+                                            niter_in,
+                                            mu=mu,
+                                            epsRL1s=[lamda],
+                                            tol=1e-4,
+                                            tau=1.0,
+                                            **dict(iter_lim=30, damp=1e-10)
+                                        )
+        print(f'time for one line: {(time.time()  - t)/(shape[1] * shape[2])}')
+        self.denoised = True
+        self.clipped = False
     
     @time_it
     def cut_negatives(self):
@@ -263,8 +317,10 @@ class coherentSVIM_analysis:
     def show_inverted_xz(self):
         inverted_xz = np.sum(self.image_inv, 2)
         
-        dmdPx_to_sample_ratio = 1 # (um/px)
+        dmdPx_to_sample_ratio = 1.247 # (um/px)
         aspect_xz = (self.ROI_s_z * dmdPx_to_sample_ratio / len(self.disp_freqs))/0.65
+        
+        aspect_xz = 0.5
         
         # fig1=plt.figure( figsize = (3, 6) , constrained_layout=True) 
         fig1=plt.figure( constrained_layout=True) 
@@ -338,22 +394,33 @@ if __name__ == "__main__" :
         
         
         dataset.merge_pos_neg()
-        dataset.setROI(814-40,  1132-40, 80)
+        dataset.setROI(814,  1132, 1)
         # dataset.setROI(420,  524, 1000)
         # dataset.show_im_raw()
         
         dataset.choose_freq()
         
+        #%% 
+        
         base = 'cos'
-        dataset.p_invert(base)
-        dataset.show_inverted_xy()
-        dataset.show_inverted_xz()
+        mu = 0.01
+        lamda = 12
+        niter_out = 50
+        niter_in = 3
+        dataset.invert_and_denoise1D(base, mu, lamda, niter_out, niter_in)
+        # dataset.show_inverted_xy()
+        # dataset.show_inverted_xz()
+        
+        
+        fig, ax = plt.subplots()
+        ax.plot(dataset.image_inv[:,0,0], label = f'mu = {mu}, lambda = {lamda}\nNiter_out = {niter_out}, niter_in = {niter_in}')
+        ax.legend()
         
         #%% 
         
-        dataset.denoise()
+        # dataset.denoise()
         # dataset.show_inverted_xy()
-        dataset.show_inverted_xz()
+        # dataset.show_inverted_xz()
         
         # %%
         # dataset.cut_negatives()
@@ -392,7 +459,7 @@ if __name__ == "__main__" :
         
         
         
-        line = dataset.image_inv[:,40,40]
+        line = dataset.imageRaw[:,40,40]
         
         fig1, ax1 = plt.subplots(1,1)
         ax1.plot(line, '--', label = f'inverted pixel ({base})')
@@ -429,7 +496,7 @@ if __name__ == "__main__" :
         
         
           
-        import pylops
+        
         nz = len(line)
         Iop = pylops.Identity(nz)
         
