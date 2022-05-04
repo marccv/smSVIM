@@ -70,10 +70,49 @@ import numpy as np
 # ax1.imshow(f)
 
 
-a = np.array([[[1, 2],[3,4]],[[5,6],[7,8]]])
+a = np.array([[[1, 2],[3,4]],[[5,6],[7,8]], [[9,10], [11,12]]])
 nz, ny, nx = a.shape
 print(a)
 
 
-print(a.reshape( nz, (nx*ny)))
+b = a.reshape( nz, (nx*ny))
+print(b)
+
+
+#%%
+
+c = a.ravel(order = 'C')
+print(c)
+
+# d = c.reshape(a.shape)
+# print(d)
+
+e = c.reshape( nz, (nx*ny))
+print(e)
+
+M = np.array([[1,0,0],[0,2,0],[0,0,0.5]])
+print(M)
+print(M.transpose())
+
+
+print((M.transpose()@e).ravel())
+print((M@e).ravel().reshape(a.shape))
+
+
+#%%
+import pylops
+from scipy.sparse.linalg import aslinearoperator
+from scipy.sparse.linalg import LinearOperator
+
+def Op(v):
+    v = v.reshape( nz, int(len(v)/nz))
+    return (M@v).ravel()
+
+
+# M = M.astype(float)
+# Op_s = aslinearoperator(Op)
+A = LinearOperator((nx*ny*nz,nx*ny*nz), matvec = Op, dtype = float)
+Op_s = pylops.LinearOperator(M)
+
+
 
