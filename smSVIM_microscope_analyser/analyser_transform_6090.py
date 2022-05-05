@@ -409,7 +409,7 @@ class coherentSVIM_analysis:
                                     epsRL1s = lamda,
                                     tol=1e-4,
                                     tau=1.0,
-                                    **dict(iter_lim=30, damp=1e-10)
+                                    **dict(iter_lim=20, damp=1e-10)
                                 )
         print(f'time for one line: {(time.time()  - t)/(shape[1] * shape[2])}')
         
@@ -549,13 +549,13 @@ if __name__ == "__main__" :
     
 
         #   ----  1 ----- 
-        file_name = '/Users/marcovitali/Documents/Poli/tesi/ScopeFoundy/coherentSVIM/data/data_28_4_22/220428_124841_coherent_SVIM_phantom2_good.h5'
+        # file_name = '/Users/marcovitali/Documents/Poli/tesi/ScopeFoundy/coherentSVIM/data/data_28_4_22/220428_124841_coherent_SVIM_phantom2_good.h5'
         #   ----  2 ----- 
         # file_name = '/Users/marcovitali/Documents/Poli/tesi/ScopeFoundy/coherentSVIM/data/data_28_4_22/220428_124222_coherent_SVIM_phantom2_good.h5'
         #   ----  3 ----- 
         # file_name = '/Users/marcovitali/Documents/Poli/tesi/ScopeFoundy/coherentSVIM/data/data_28_4_22/220428_125643_coherent_SVIM_phantom2_good.h5'
-        #   ----  4 ----- 
-        # file_name = '/Users/marcovitali/Documents/Poli/tesi/ScopeFoundy/coherentSVIM/data/data_28_4_22/220428_115143_coherent_SVIM_phantom2_good.h5'
+        #   ----  4 ----- 1
+        file_name = '/Users/marcovitali/Documents/Poli/tesi/ScopeFoundy/coherentSVIM/data/data_28_4_22/220428_115143_coherent_SVIM_phantom2_good.h5'
         
         
         # file_name_h5 = file_name + '.h5'
@@ -565,24 +565,23 @@ if __name__ == "__main__" :
         
         
         dataset.merge_pos_neg()
-        # dataset.setROI(814-100,  1132-100, 200) # one bead in dataset 4
+        dataset.setROI(814-20,  1132-20, 40) # one bead in dataset 4
         # dataset.setROI(420,  524, 1000)
-        dataset.setROI(1839-110, 879-110 , 220) # three beads in dataset 1
+        # dataset.setROI(1839-110, 879-110 , 220) # three beads in dataset 1
         # dataset.show_im_raw()
         
         dataset.choose_freq()
         
         #%% 
         
-        base = 'sq'
+        base = 'cos'
         mu = 0.01
-        lamda = 20
-        niter_out = 30
+        lamda = 30
+        niter_out = 15
         niter_in = 2
         
-        dataset.invert_and_denoise3D_v2(base, mu, lamda, niter_out, niter_in)
-        
         # dataset.invert_and_denoise1D_no_for(base, mu, lamda, niter_out, niter_in)
+        dataset.invert_and_denoise3D_v2(base, mu, lamda, niter_out, niter_in)
         
         # dataset.show_inverted_xy()
         # dataset.show_inverted_xz()
