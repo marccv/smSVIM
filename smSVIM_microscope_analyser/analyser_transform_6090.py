@@ -14,7 +14,7 @@ import tifffile as tiff
 import time
 import matplotlib.pyplot as plt
 plt.rcParams['figure.dpi'] = 300
-plt.rcParams.update({'font.size': 7})
+plt.rcParams.update({'font.size': 9})
 
 from skimage.restoration import denoise_tv_chambolle
 
@@ -190,11 +190,13 @@ class coherentSVIM_analysis:
         self.denoised = False
         self.clipped = False
     
+    
     @time_it
     def denoise(self, weight = 1000):
         
         shape = self.image_inv.shape
-        self.denoise_w = 'linear'
+        self.param = 'Chambolle 1D denoise on already inverted image with linear weigth'
+        
         if self.base == 'cos':
             ratio = 0.1193
         elif self.base == 'sq':
@@ -243,10 +245,13 @@ class coherentSVIM_analysis:
         nz = len(self.disp_freqs)
         
         Dop = pylops.FirstDerivative(nz, edge=True, kind="backward")
+        
         # mu = 0.01
         # lamda = 0.3
         # niter_out = 50
         # niter_in = 3
+        self.param = {'denoise': '1D', 'mu' : mu, 'lambda': lamda, 'niter_out': niter_out , 'niter_in': niter_in}
+        
         
         shape = self.imageRaw.shape
         print(shape)
@@ -254,7 +259,7 @@ class coherentSVIM_analysis:
         t = time.time()
         for i in range(shape[1]):
             for j in range(shape[2]):
-                print(i,j)
+                # print(i,j)
                 self.image_inv[:,i,j], _ = pylops.optimization.sparsity.SplitBregman(
                                             M,
                                             [Dop],
@@ -268,6 +273,7 @@ class coherentSVIM_analysis:
                                             **dict(iter_lim=30, damp=1e-10)
                                         )
         print(f'time for one line: {(time.time()  - t)/(shape[1] * shape[2])}')
+        
         self.denoised = True
         self.clipped = False
     
@@ -317,7 +323,7 @@ class coherentSVIM_analysis:
         # lamda = 0.3
         # niter_out = 50
         # niter_in = 3
-        
+        self.param = {'denoise': '1D', 'mu' : mu, 'lambda z': lamda, 'niter_out': niter_out , 'niter_in': niter_in}
         
         print(shape)
         # self.image_inv = np.zeros(shape)
@@ -338,7 +344,8 @@ class coherentSVIM_analysis:
         print(f'time for one line: {(time.time()  - t)/(shape[1] * shape[2])}')
         
         
-        self.image_inv.reshape(shape)
+        self.image_inv = dataset.image_inv.reshape(dataset.imageRaw.shape)
+        self.image_inv = self.image_inv.transpose(0,2,1)
         
         self.denoised = True
         self.clipped = False
@@ -352,7 +359,7 @@ class coherentSVIM_analysis:
     
     
     @time_it
-    def invert_and_denoise3D_v2(self, base = 'sq', mu = 0.01, lamda = 0.3, niter_out = 50, niter_in = 3):
+    def invert_and_denoise3D_v2(self, base = 'sq', mu = 0.01, lamda = [20,20,20], niter_out = 50, niter_in = 3):
         
         self.base = base
         
@@ -390,10 +397,10 @@ class coherentSVIM_analysis:
         ]
         
         # mu = 0.01
-        lamda = [lamda]*3
+        # lamda = [lamda]*3
         # niter_out = 50
         # niter_in = 3
-        
+        self.param = {'denoise': '3D', 'mu' : mu, 'lambda z,y,x': lamda, 'niter_out': niter_out , 'niter_in': niter_in}
         
         print(shape)
         # self.image_inv = np.zeros(shape)
@@ -414,7 +421,8 @@ class coherentSVIM_analysis:
         print(f'time for one line: {(time.time()  - t)/(shape[1] * shape[2])}')
         
         
-        # self.image_inv.reshape(shape)
+        self.image_inv = dataset.image_inv.reshape(dataset.imageRaw.shape)
+        self.image_inv = self.image_inv.transpose(0,2,1)
         
         self.denoised = True
         self.clipped = False
@@ -457,7 +465,7 @@ class coherentSVIM_analysis:
         
         fig1, (ax1, ax2) =plt.subplots(2, 1, gridspec_kw={'height_ratios': [ 4, 1]})
         # fig1.clf()
-        fig1.text(0.1,0.2, f'Inverted image projections (base: {self.base}, denoised: {self.denoised})')
+        fig1.text(0.1,0.2, f'Inverted image projections\n{self.param}')
         
         xy = ax1.imshow(inverted_xy.transpose(), cmap = 'gray', aspect = 1, vmin = c_min, vmax = c_max)
         ax1.set_xlabel('x (px)')
@@ -476,7 +484,7 @@ class coherentSVIM_analysis:
         
         fig1=plt.figure()
         fig1.clf()
-        fig1.suptitle(f'Inverted image XY projection (base: {self.base}, denoised: {self.denoised})')
+        fig1.suptitle(f'Inverted image XY projection\n{self.param}')
         ax1=fig1.add_subplot(111)
         xy = ax1.imshow(inverted_xy.transpose(), cmap = 'gray', aspect = 1)
         ax1.set_xlabel('x (px)')
@@ -494,20 +502,16 @@ class coherentSVIM_analysis:
         # aspect_xz = 0.5
         
         # fig1=plt.figure( figsize = (3, 6) , constrained_layout=True) 
-        fig1=plt.figure( constrained_layout=True) 
+        fig1=plt.figure( constrained_layout=False) 
         fig1.clf()
         
         ax1=fig1.add_subplot(111)
-        fig1.suptitle('Inverted image XZ projection')
+        fig1.suptitle(f'Inverted image XZ projection\n{self.param}')
         
-        if not hasattr(self, 'denoise_w'):
-            self.denoise_w = None
-        
-        ax1.set_title(f'Base: {self.base}, Denoised: {self.denoised} (w = {self.denoise_w}), clipped = {self.clipped}', fontsize = 10)
         xz = ax1.imshow(inverted_xz, cmap = 'gray', aspect = aspect_xz, interpolation = 'none') #aspect = 12.82 for 24 z pixels, aspect = 6.6558 for 61 z pixels, aspect = 11.80 for tests in 61px, aspect = 30 for testing in 24 px
         ax1.set_xlabel('x (px)')
         ax1.set_ylabel('z (px)')
-        cbar = fig1.colorbar(xz, ax = ax1, shrink=0.5, format='%.0e')
+        cbar = fig1.colorbar(xz, ax = ax1, shrink=1, format='%.0e')
         cbar.ax.set_ylabel('Counts', rotation=270)
     
         
@@ -576,48 +580,27 @@ if __name__ == "__main__" :
         
         base = 'cos'
         mu = 0.01
-        lamda = 30
+        lamda = [20, 20, 20]
         niter_out = 15
         niter_in = 2
         
         # dataset.invert_and_denoise1D_no_for(base, mu, lamda, niter_out, niter_in)
         dataset.invert_and_denoise3D_v2(base, mu, lamda, niter_out, niter_in)
         
-        # dataset.show_inverted_xy()
-        # dataset.show_inverted_xz()
-        
-        #%%
-        
-        temp = dataset.image_inv.reshape(dataset.imageRaw.shape)
-        temp = temp.transpose(0,2,1)
-        
-        # fig, ax = plt.subplots()
-        # ax.plot(temp[:,100,100], label = f'mu = {mu}, lambda = {lamda}\nNiter_out = {niter_out}, niter_in = {niter_in}')
-        # ax.legend()
-        
-        
-        dataset.image_inv = temp
         dataset.show_inverted_xy()
         dataset.show_inverted_xz()
         
-        # %%
-        # dataset.cut_negatives()
-        dataset.show_inverted_xz()
+        #%%
         
-        # base = 'sq'
-        # dataset.p_invert(base)
-        # dataset.show_inverted_xz()
         
-        # base = 'sp_dct'
-        # dataset.invert(base )
-        # dataset.show_inverted_xz()
+        fig, ax = plt.subplots()
+        ax.plot(dataset.image_inv[:,100,100], label = f'{dataset.param}')
+        ax.legend()
         
         
         
-        
-        
-        
-        
+        #%%     
+
         # save_file = 'Users/marcovitali/Documents/Poli/tesi/ScopeFoundy/coherentSVIM/data/data_28_4_22/220428_124841_coherent_SVIM_phantom2_good_inverted.tif'        
         
         # try:
