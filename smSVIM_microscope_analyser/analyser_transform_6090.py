@@ -134,10 +134,10 @@ class coherentSVIM_analysis:
         self.disp_freqs = disp_freqs[0:N]
         
         # to eliminate copies of the same frequency
-        # mask = np.append(np.diff(disp_freqs)!= 0, True)
+        mask = np.append(np.diff(disp_freqs)!= 0, True)
         
-        # self.imageRaw = self.imageRaw[mask, :, :]
-        # self.disp_freqs = np.array(disp_freqs)[mask]
+        self.imageRaw = self.imageRaw[mask, :, :]
+        self.disp_freqs = np.array(disp_freqs)[mask]
     
     @time_it    
     def invert(self, base = 'sq'):
@@ -251,7 +251,7 @@ class coherentSVIM_analysis:
         # niter_out = 50
         # niter_in = 3
         self.param = {'denoise': '1D', 'mu' : mu, 'lambda': lamda, 'niter_out': niter_out , 'niter_in': niter_in}
-        
+        print(self.param)
         
         shape = self.imageRaw.shape
         print(shape)
@@ -288,7 +288,7 @@ class coherentSVIM_analysis:
     
     
     @time_it
-    def invert_and_denoise1D_no_for(self, base = 'sq', mu = 0.01, lamda = 0.3, niter_out = 50, niter_in = 3):
+    def invert_and_denoise1D_no_for(self, base = 'sq', mu = 0.01, lamda = 0.3, niter_out = 50, niter_in = 3, lsqr_niter = 5, lsqr_damp = 1e-4):
         
         self.base = base
         
@@ -323,8 +323,8 @@ class coherentSVIM_analysis:
         # lamda = 0.3
         # niter_out = 50
         # niter_in = 3
-        self.param = {'denoise': '1D', 'mu' : mu, 'lambda z': lamda, 'niter_out': niter_out , 'niter_in': niter_in}
-        
+        self.param = {'denoise': '1D', 'mu' : mu, 'lambda z': lamda, 'niter_out': niter_out , 'niter_in': niter_in, 'lsqr_niter' : lsqr_niter, 'lsqr_damp' : lsqr_damp}
+        print(self.param)
         print(shape)
         # self.image_inv = np.zeros(shape)
         t = time.time()
@@ -339,7 +339,7 @@ class coherentSVIM_analysis:
                                     epsRL1s=[lamda],
                                     tol=1e-4,
                                     tau=1.0,
-                                    **dict(iter_lim=30, damp=1e-10)
+                                    **dict(iter_lim=lsqr_niter, damp=lsqr_damp)
                                 )
         print(f'time for one line: {(time.time()  - t)/(shape[1] * shape[2])}')
         
@@ -359,7 +359,7 @@ class coherentSVIM_analysis:
     
     
     @time_it
-    def invert_and_denoise3D_v2(self, base = 'sq', mu = 0.01, lamda = [20,20,20], niter_out = 50, niter_in = 3):
+    def invert_and_denoise3D_v2(self, base = 'sq', mu = 0.01, lamda = [20,20,20], niter_out = 50, niter_in = 3, lsqr_niter = 5, lsqr_damp = 1e-4):
         
         self.base = base
         
@@ -400,8 +400,8 @@ class coherentSVIM_analysis:
         # lamda = [lamda]*3
         # niter_out = 50
         # niter_in = 3
-        self.param = {'denoise': '3D', 'mu' : mu, 'lambda z,y,x': lamda, 'niter_out': niter_out , 'niter_in': niter_in}
-        
+        self.param = {'denoise': '3D', 'mu' : mu, 'lambda z,y,x': lamda, 'niter_out': niter_out , 'niter_in': niter_in, 'lsqr_niter' : lsqr_niter, 'lsqr_damp' : lsqr_damp}
+        print(self.param)
         print(shape)
         # self.image_inv = np.zeros(shape)
         t = time.time()
@@ -416,7 +416,7 @@ class coherentSVIM_analysis:
                                     epsRL1s = lamda,
                                     tol=1e-4,
                                     tau=1.0,
-                                    **dict(iter_lim=20, damp=1e-10)
+                                    **dict(iter_lim=lsqr_niter, damp=lsqr_damp)
                                 )
         print(f'time for one line: {(time.time()  - t)/(shape[1] * shape[2])}')
         
@@ -465,7 +465,7 @@ class coherentSVIM_analysis:
         
         fig1, (ax1, ax2) =plt.subplots(2, 1, gridspec_kw={'height_ratios': [ 4, 1]})
         # fig1.clf()
-        fig1.text(0.1,0.2, f'Inverted image projections\n{self.param}')
+        fig1.text(0.1,0.2, f'Inverted image projections, base: {self.base}\n{self.param}')
         
         xy = ax1.imshow(inverted_xy.transpose(), cmap = 'gray', aspect = 1, vmin = c_min, vmax = c_max)
         ax1.set_xlabel('x (px)')
@@ -484,7 +484,7 @@ class coherentSVIM_analysis:
         
         fig1=plt.figure()
         fig1.clf()
-        fig1.suptitle(f'Inverted image XY projection\n{self.param}')
+        fig1.suptitle(f'Inverted image XY projection, base: {self.base}\n{self.param}')
         ax1=fig1.add_subplot(111)
         xy = ax1.imshow(inverted_xy.transpose(), cmap = 'gray', aspect = 1)
         ax1.set_xlabel('x (px)')
@@ -506,7 +506,7 @@ class coherentSVIM_analysis:
         fig1.clf()
         
         ax1=fig1.add_subplot(111)
-        fig1.suptitle(f'Inverted image XZ projection\n{self.param}')
+        fig1.suptitle(f'Inverted image XZ projection, base: {self.base}\n{self.param}')
         
         xz = ax1.imshow(inverted_xz, cmap = 'gray', aspect = aspect_xz, interpolation = 'none') #aspect = 12.82 for 24 z pixels, aspect = 6.6558 for 61 z pixels, aspect = 11.80 for tests in 61px, aspect = 30 for testing in 24 px
         ax1.set_xlabel('x (px)')
@@ -553,13 +553,13 @@ if __name__ == "__main__" :
     
 
         #   ----  1 ----- 
-        # file_name = '/Users/marcovitali/Documents/Poli/tesi/ScopeFoundy/coherentSVIM/data/data_28_4_22/220428_124841_coherent_SVIM_phantom2_good.h5'
+        file_name = '/Users/marcovitali/Documents/Poli/tesi/ScopeFoundy/coherentSVIM/data/data_28_4_22/220428_124841_coherent_SVIM_phantom2_good.h5'
         #   ----  2 ----- 
         # file_name = '/Users/marcovitali/Documents/Poli/tesi/ScopeFoundy/coherentSVIM/data/data_28_4_22/220428_124222_coherent_SVIM_phantom2_good.h5'
         #   ----  3 ----- 
         # file_name = '/Users/marcovitali/Documents/Poli/tesi/ScopeFoundy/coherentSVIM/data/data_28_4_22/220428_125643_coherent_SVIM_phantom2_good.h5'
         #   ----  4 ----- 1
-        file_name = '/Users/marcovitali/Documents/Poli/tesi/ScopeFoundy/coherentSVIM/data/data_28_4_22/220428_115143_coherent_SVIM_phantom2_good.h5'
+        # file_name = '/Users/marcovitali/Documents/Poli/tesi/ScopeFoundy/coherentSVIM/data/data_28_4_22/220428_115143_coherent_SVIM_phantom2_good.h5'
         
         
         # file_name_h5 = file_name + '.h5'
@@ -569,10 +569,10 @@ if __name__ == "__main__" :
         
         
         dataset.merge_pos_neg()
-        dataset.setROI(814-20,  1132-20, 40) # one bead in dataset 4
+        # dataset.setROI(814-20,  1132-20, 40) # one bead in dataset 4
         # dataset.setROI(420,  524, 1000)
         # dataset.setROI(1839-110, 879-110 , 220) # three beads in dataset 1
-        # dataset.show_im_raw()
+        dataset.show_im_raw()
         
         dataset.choose_freq()
         
@@ -583,9 +583,11 @@ if __name__ == "__main__" :
         lamda = [20, 20, 20]
         niter_out = 15
         niter_in = 2
+        lsqr_niter = 5
+        lsqr_damp = 1e-4
         
         # dataset.invert_and_denoise1D_no_for(base, mu, lamda, niter_out, niter_in)
-        dataset.invert_and_denoise3D_v2(base, mu, lamda, niter_out, niter_in)
+        dataset.invert_and_denoise3D_v2(base, mu, lamda, niter_out, niter_in, lsqr_niter, lsqr_damp)
         
         dataset.show_inverted_xy()
         dataset.show_inverted_xz()

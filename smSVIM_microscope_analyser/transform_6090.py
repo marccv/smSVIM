@@ -27,7 +27,7 @@ class dct_6090:
         
         N = self.N
         
-        self.k = self.disp_f
+        self.k = self.disp_f.copy()
         self.x = np.linspace(1/(2*N), (N - 0.5)/N, N)
         
         self.X , self.K = np.meshgrid(self.x,self.k)
@@ -46,7 +46,7 @@ class dct_6090:
         
         # We perform the following steps to create a sq wave with freq = 0, period = inf
         
-        temp = self.K
+        temp = self.K.copy()
         temp[0,:] = 0.1* np.ones([1,self.N])
         Periods = np.reciprocal(temp)
         self.matrix = -1 + 2*( (self.X + Periods/4)%(Periods) < (Periods/2))
