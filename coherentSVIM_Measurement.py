@@ -153,6 +153,24 @@ class coherentSvimMeasurement(Measurement):
     name = "coherent_SVIM"
     
     
+    def calculate_freq(self, f_min, f_max, ROI_s):
+        
+        freqs = np.linspace(f_min, f_max, int(2*(f_max - f_min) + 1),dtype = float)
+                
+        if f_min == 0.0:
+            disp_freqs = [0]
+            for freq in freqs[1:]:
+                period = int(ROI_s/freq)
+                disp_freqs.append(ROI_s/period)
+        else:
+            disp_freqs = []
+            for freq in freqs:
+                period = int(ROI_s/freq)
+                disp_freqs.append(ROI_s/period)
+                
+        mask = np.append(np.diff(disp_freqs)!= 0, True)
+        return np.array(freqs)[mask]
+    
     def set_f_min(self,f_min):
         
         if (f_min*10)%5 != 0:
@@ -161,9 +179,12 @@ class coherentSvimMeasurement(Measurement):
             self.settings['f_min'] = f_min
         else:
             if hasattr(self, 'num_frames'):
-                self.settings['num_frames']  = (1 + self.settings['PosNeg']) * ( 2*(self.settings['f_max'] - f_min) + 1)
+                
+                self.freqs = self.calculate_freq(f_min, self.settings['f_max'], self.settings['ROI_s_z'] )     
+                self.settings['num_frames']  = (1 + self.settings['PosNeg']) * ( len(self.freqs))
             
     def set_f_max(self,f_max):
+        
         
         if (f_max*10)%5 != 0:
             
@@ -171,12 +192,24 @@ class coherentSvimMeasurement(Measurement):
             self.settings['f_max'] = f_max
         else:
             if hasattr(self, 'num_frames'):
-               self.settings['num_frames']  = (1 + self.settings['PosNeg']) * (2*(f_max - self.settings['f_min']) + 1)
+                
+                self.freqs = self.calculate_freq(self.settings['f_min'], f_max, self.settings['ROI_s_z'] )     
+                self.settings['num_frames']  = (1 + self.settings['PosNeg']) * ( len(self.freqs))
      
     def set_PosNeg(self, PosNeg):
         
         if hasattr(self, 'num_frames'):
-           self.settings['num_frames']  =(1 + PosNeg) * (2*(self.settings['f_max'] - self.settings['f_min']) + 1)
+            if hasattr(self, 'freqs'):
+                self.settings['num_frames']  =(1 + PosNeg) * (len(self.freqs))
+            else:
+                self.freqs = self.calculate_freq(self.settings['f_min'], self.settings['f_max'], self.settings['ROI_s_z'] )
+                self.settings['num_frames']  =(1 + PosNeg) * (len(self.freqs))
+           
+    def set_ROI_s_z(self, ROI_s_z):
+        
+        if hasattr(self, 'num_frames'):
+            self.freqs = self.calculate_freq(self.settings['f_min'], self.settings['f_max'], ROI_s_z )    
+            self.settings['num_frames']  =(1 + self.settings['PosNeg']) * ( len(self.freqs))
            
     def calculate_margin(self):
         
@@ -195,25 +228,21 @@ class coherentSvimMeasurement(Measurement):
         
         self.camera.settings['exposure_time'] = exposure*1e-3
         self.settings['effective_fps'] =  self.calculate_eff_fps()
+     
 
-    # def update_from_subarrayV(self) :
-
-    #     self.settings['edge_trigger_margin'] = self.calculate_margin()
-    #     self.settings['effective_fps'] =  self.calculate_eff_fps()     
-
-    def set_subarray_vsize(self, vsize):
+    def read_subarray_vsize(self):
         
-        if vsize % 4 != 0:
-            vsize = vsize - vsize%4
-            self.settings['subarray_vsize'] = vsize
-            
-        else:   
-            self.camera.settings['subarray_vsize'] = vsize  # TODO: I do not understand why it does not update the displayed value
-            # self.camera.hamamatsu.setSubarrayV(vsize)
-            
-            self.camera.read_from_hardware()
-            self.settings['edge_trigger_margin'] = self.calculate_margin()
-            self.settings['effective_fps'] =  self.calculate_eff_fps()
+        self.settings['edge_trigger_margin'] = self.calculate_margin()
+        self.settings['effective_fps'] =  self.calculate_eff_fps()     
+        
+        
+        
+        
+        
+        
+        
+        
+        
         
     def setup(self):
         
@@ -233,15 +262,14 @@ class coherentSvimMeasurement(Measurement):
         self.settings.New('level_min', dtype=int, initial=60 )
         self.settings.New('level_max', dtype=int, initial=150 )
         self.f_min = self.settings.New('f_min', dtype=float, initial=0.0, spinbox_step= 0.5 , spinbox_decimals= 1, vmin = 0)
-        self.f_max = self.settings.New('f_max', dtype=float, initial=10.0 , spinbox_step= 0.5, spinbox_decimals=1, vmin = 0)
+        self.f_max = self.settings.New('f_max', dtype=float, initial=30.0 , spinbox_step= 0.5, spinbox_decimals=1, vmin = 0)
         self.PosNeg = self.settings.New('PosNeg', dtype = bool, initial = True)
-        self.num_frames = self.settings.New('num_frames',ro = True, dtype = int, initial = 42) 
-        self.settings.New('ROI_s_z', dtype=int, initial=200, unit = 'px' )
+        self.num_frames = self.settings.New('num_frames',ro = True, dtype = int, initial = 70) 
+        self.ROI_s_z = self.settings.New('ROI_s_z', dtype=int, initial=200, unit = 'px' )
         self.settings.New('ROI_s_y', dtype=int, initial=600, unit = 'px' )
         self.settings.New('transpose_pattern', dtype=bool, initial=False )
         self.exposure = self.settings.New("exposure", dtype = float, initial=100, vmin=1.004, vmax = 1e4, spinbox_step=10, spinbox_decimals=3, unit="ms")
-        # self.add_operation("update_from_subarrayV", self.update_from_subarrayV)   # TODo remove
-        self.subarray_vsize = self.settings.New("subarray_vsize", dtype = float, spinbox_decimals = 0, initial = 2048, vmax = 2048, vmin = 4)
+        self.add_operation("read_subarray_vsize", self.read_subarray_vsize)
         self.settings.New('edge_trigger_margin', dtype = float, initial = self.calculate_margin(), vmin = 0.0, ro=True, spinbox_decimals = 3 , unit = 'ms')
         self.settings.New('effective_fps', dtype = float, initial = self.calculate_eff_fps(), vmin = 0.0, ro = True, spinbox_decimals = 2, unit = 'fps') # TODO make autoupdate
         
@@ -251,8 +279,7 @@ class coherentSvimMeasurement(Measurement):
         self.f_max.hardware_set_func = self.set_f_max
         self.PosNeg.hardware_set_func = self.set_PosNeg
         self.exposure.hardware_set_func = self.set_exposure
-        self.subarray_vsize.hardware_set_func = self.set_subarray_vsize
-        
+        self.ROI_s_z.hardware_set_func = self.set_ROI_s_z
         
         
         
@@ -334,9 +361,6 @@ class coherentSvimMeasurement(Measurement):
         
         print("\n****************\nLoading pattern\n****************\n")
         t = time.time()
-        f_start = self.settings['f_min']
-        f_stop = self.settings['f_max']
-        freqs = np.linspace(f_start, f_stop, int(2*(f_stop - f_start) + 1),dtype = float)
         num_frames = self.settings['num_frames']
         
         
@@ -367,7 +391,7 @@ class coherentSvimMeasurement(Measurement):
         else:
             centered = False
         
-        print(f'\nCreating {num_frames} patterns...\n\nTheoretical frequencies: ', freqs)
+        print(f'\nCreating {num_frames} patterns...\n\nTheoretical frequencies: ', self.freqs)
         print('\nPosNeg: ', self.settings['PosNeg'])
         print('\nPlease wait...', end = '')
         
@@ -381,7 +405,7 @@ class coherentSvimMeasurement(Measurement):
         
         if self.settings['PosNeg'] == False:
              
-            for freq in freqs:
+            for freq in self.freqs:
 
                 im_pos, freq_out = create_squared_pattern_from_freq(freq,transpose_pattern, crop_squared_size, centered, phase)
                 
@@ -390,7 +414,7 @@ class coherentSvimMeasurement(Measurement):
         
         else:
             #PosNeg
-            for freq in freqs:
+            for freq in self.freqs:
 
                 im_pos, freq_out = create_squared_pattern_from_freq(freq,transpose_pattern, crop_squared_size, centered, phase)
                 im_neg = np.uint8(np.logical_not(im_pos)*1)
@@ -448,7 +472,7 @@ class coherentSvimMeasurement(Measurement):
         t_shutter_open = time.time()
         
         self.shutter_hw.shutter.open_shutter()
-        time.sleep(0.1) #seconds
+        time.sleep(0.3) #seconds
         
         #=====================================
         # DMD start

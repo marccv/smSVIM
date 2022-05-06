@@ -19,9 +19,12 @@ class dct_6090:
         
         # It receives the actual frequencies used to illuminate the sample
         
-        self.N = len(disp_f)
-        self.disp_f = disp_f
-
+        self.N = int(np.ceil(max(disp_f)*2)) # sort of Shannon Th.
+        
+        # I throw away doubles
+        mask = np.append(np.diff(disp_f)!= 0, True)
+        self.disp_f = np.array(disp_f)[mask]
+    
 
     def create_space(self):
         
@@ -94,9 +97,7 @@ if __name__ == '__main__':
     
     # Creation of the transform object
     
-    N = 61
-    
-    tras = dct_6090(disp_f[0:N])
+    tras = dct_6090(disp_f)
     tras.create_space()
     
     
@@ -162,23 +163,23 @@ if __name__ == '__main__':
     # ----------------------------------
     # SCIPY DCT
     
-    if err_on_y:
+    # if err_on_y:
         
-        y_dct = sp_fft.dct(x, norm = 'ortho')
-        y_dct_e = np.multiply(y_dct + max(y_dct)*offset, error_1D)
+        # y_dct = sp_fft.dct(x, norm = 'ortho')
+        # y_dct_e = np.multiply(y_dct + max(y_dct)*offset, error_1D)
         
         # >> To perform the DCT inversion on the DCT spectrum
         # x_prime_dct = sp_fft.idct(y_dct_e, norm = 'ortho')
         
         # >> To perform the DCT inversion on the cos or sq spectrum
-        x_prime_dct = sp_fft.idct(y_with_e, norm = 'ortho')
+        # x_prime_dct = sp_fft.idct(y_with_e, norm = 'ortho')
         
         
     # ----------------------------------
     
     
     if not err_on_y:
-        x_prime_inv = np.matmul(tras.inv_matrix,y)
+        # x_prime_inv = np.matmul(tras.inv_matrix,y)
         x_prime_lstsq ,_,_,_= np.linalg.lstsq(tras.matrix, y, rcond = None)
         x_prime_pinv = np.matmul(tras.pinv_matrix, y)
     else:
@@ -189,11 +190,11 @@ if __name__ == '__main__':
         x_prime_pinv = np.matmul(tras.pinv_matrix, y_with_e)
     
     
-    x_prime_dct *= max(x_prime_lstsq)/max(x_prime_dct) # rescale the DCT inverted x
+    # x_prime_dct *= max(x_prime_lstsq)/max(x_prime_dct) # rescale the DCT inverted x
     
     # rec_e_inv = np.linalg.norm(x-x_prime_inv, 2)
     # rec_e_solve = np.linalg.norm(x - x_prime_solve, 2)
-    rec_e_dct = np.linalg.norm(x-x_prime_dct, 2)
+    # rec_e_dct = np.linalg.norm(x-x_prime_dct, 2)
     rec_e_lstsq = np.linalg.norm(x-x_prime_lstsq, 2)
     rec_e_pinv = np.linalg.norm(x-x_prime_pinv, 2)
     
@@ -201,7 +202,7 @@ if __name__ == '__main__':
     # print(f'>> L2 norm errors <<\n{base} base, inverse:  {rec_e_inv:.5e}')
     # print(f'{base} base, np solve: {rec_e_solve:.5e}')
     print(f'{base} base, np lstsq: {rec_e_lstsq:.5e}')
-    print(f'Scipy DCT:          {rec_e_dct:.5e}')
+    # print(f'Scipy DCT:          {rec_e_dct:.5e}')
     print(f'{base} base, Pinv:     {rec_e_pinv:.5e}')
     
     fig2, (ax1, ax2) =plt.subplots(2, 1, gridspec_kw={'height_ratios': [ 3, 5]}, constrained_layout=True)
@@ -216,8 +217,26 @@ if __name__ == '__main__':
     ax2.plot(tras.x, x_prime_lstsq,'--o', color = 'C3', markersize = 6, label = f'Inverted LSQR (base: {base})')
     ax2.plot(tras.x, x_prime_pinv,'--x', color = 'C4', markersize = 6, label = f'Pseudo Inv dist. (base: {base})')
     
-    if err_on_y: ax2.plot(tras.x, x_prime_dct,'--D', color = 'C6', markersize = 4, label = 'DCT inversion')
+    # if err_on_y: ax2.plot(tras.x, x_prime_dct,'--D', color = 'C6', markersize = 4, label = 'DCT inversion')
     ax2.set_xlabel('x', fontsize = 12)
     ax2.legend(fontsize = 10)
+    
+    
+    #%%
+    
+    temp = np.linspace(0,1,1000)
+    temp_y = np.cos(2*np.pi * disp_f[-1] *temp)
+    y_dct = sp_fft.dct(tras.matrix[-1,:], norm = 'ortho')
+    x_dct = sp_fft.idct(y_dct, norm = 'ortho')
+    
+    
+    fig3, ax3 = plt.subplots(1,1)
+    ax3.plot(tras.x, tras.matrix[1,:])
+    ax3.plot(temp, temp_y)
+    ax3.plot(tras.x, tras.matrix[-1,:], 'o')
+    ax3.plot(tras.x, x_dct)
+    
+    plt.figure()
+    plt.plot(y_dct)
     
     

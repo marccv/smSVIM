@@ -19,7 +19,7 @@ plt.rcParams.update({'font.size': 9})
 from skimage.restoration import denoise_tv_chambolle
 
 import pylops
-from scipy.sparse.linalg import aslinearoperator
+# from scipy.sparse.linalg import aslinearoperator
 from scipy.sparse.linalg import LinearOperator
 
 import sys
@@ -49,10 +49,7 @@ class coherentSVIM_analysis:
     
     name = 'coherentSVIM_analysis'
     
-    # disp_freq = np.array([0, 0.5, 1.0, 1.5037593984962405, 2.0, 2.5, 3.0303030303030303, 3.508771929824561, 4.0, 4.545454545454546, 5.0, 5.555555555555555, 6.0606060606060606, 6.666666666666667, 7.142857142857143, 7.6923076923076925, 8.0, 8.695652173913043, 9.090909090909092, 9.523809523809524, 10.0, 10.526315789473685, 11.11111111111111, 11.764705882352942, 12.5, 12.5, 13.333333333333334, 14.285714285714286, 14.285714285714286, 15.384615384615385, 15.384615384615385, 16.666666666666668, 16.666666666666668, 16.666666666666668, 18.181818181818183, 18.181818181818183, 18.181818181818183, 20.0, 20.0, 20.0, 20.0, 22.22222222222222, 22.22222222222222, 22.22222222222222, 22.22222222222222, 25.0, 25.0, 25.0, 25.0, 25.0, 25.0, 28.571428571428573, 28.571428571428573, 28.571428571428573, 28.571428571428573, 28.571428571428573, 28.571428571428573, 28.571428571428573, 33.333333333333336, 33.333333333333336, 33.333333333333336])
-    
-    
-    
+
     def __init__(self, fname):
         
         self.filename  = fname
@@ -60,12 +57,9 @@ class coherentSVIM_analysis:
     @time_it   
     def load_h5_file(self):
         
-        self.imageRaw = get_h5_dataset(self.filename) #TODO read h5 info
+        self.imageRaw = get_h5_dataset(self.filename) 
         
-        #load some settings, if present in the h5 file
-        # for key in ['exposure', 'transpose_pattern','ROI_s_z','ROI_s_y']:
-        #     val = get_h5_attr(self.filename, key)
-        #     print(val)
+        
             
     def show_im_raw(self):
         pg.image(self.imageRaw, title="Raw image")        
@@ -117,17 +111,25 @@ class coherentSVIM_analysis:
     @time_it
     def choose_freq(self, N = None):
         
-        f_start = get_h5_attr(self.filename, 'f_min')[0]
-        f_stop = get_h5_attr(self.filename, 'f_max')[0]
+        f_min = get_h5_attr(self.filename, 'f_min')[0]
+        f_max = get_h5_attr(self.filename, 'f_max')[0]
         ROI_s_z = get_h5_attr(self.filename, 'ROI_s_z')[0]
         self.ROI_s_z = ROI_s_z
         
-        freqs = np.linspace(f_start, f_stop, int(2*(f_stop - f_start) + 1),dtype = float)
-        disp_freqs = [0]
-        
-        for freq in freqs[1:]:
-            period = int(ROI_s_z/freq)
-            disp_freqs.append(ROI_s_z/period)
+        freqs = np.linspace(f_min, f_max, int(2*(f_max - f_min) + 1),dtype = float)
+                
+        if f_min == 0.0:
+            disp_freqs = [0]
+            for freq in freqs[1:]:
+                period = int(ROI_s_z/freq)
+                disp_freqs.append(ROI_s_z/period)
+        else:
+            disp_freqs = []
+            for freq in freqs:
+                period = int(ROI_s_z/freq)
+                disp_freqs.append(ROI_s_z/period)
+                
+        mask = np.append(np.diff(disp_freqs)!= 0, True)
         
         
         self.imageRaw = self.imageRaw[0:N, :, :]
@@ -305,19 +307,21 @@ class coherentSVIM_analysis:
         shape = (nz,ny,nx)
         M = self.transform.matrix
         M = M.astype(float)
+        Nz = M.shape[1]
+        
         
         def Op(v):
-            v = v.reshape( nz, nx*ny)
+            v = v.reshape( Nz, int(len(v)/Nz))
             return (M@v).ravel()
         
         def Op_t(v):
-            v = v.reshape( nz, nx*ny)
+            v = v.reshape( nz, int(len(v)/nz))
             return (M.transpose()@v).ravel()
         
-        Op_s = LinearOperator((nz*nx*ny, nz*nx*ny), matvec = Op, rmatvec  = Op_t, dtype = float)
+        Op_s = LinearOperator((nz*nx*ny, Nz*nx*ny), matvec = Op, rmatvec  = Op_t, dtype = float)
         Op_s = pylops.LinearOperator(Op_s)
         
-        Dop = pylops.FirstDerivative(nz*nx*ny, shape,  0, edge=True, kind="backward")
+        Dop = pylops.FirstDerivative(Nz*ny*nx, (Nz, ny, nx),  0, edge=True, kind="backward")
         
         # mu = 0.01
         # lamda = 0.3
@@ -344,7 +348,7 @@ class coherentSVIM_analysis:
         print(f'time for one line: {(time.time()  - t)/(shape[1] * shape[2])}')
         
         
-        self.image_inv = dataset.image_inv.reshape(dataset.imageRaw.shape)
+        self.image_inv = dataset.image_inv.reshape(Nz,ny,nx)
         self.image_inv = self.image_inv.transpose(0,2,1)
         
         self.denoised = True
@@ -377,23 +381,25 @@ class coherentSVIM_analysis:
         M = self.transform.matrix
         M = M.astype(float)
         
+        Nz = M.shape[1]
+        
         def Op(v):
-            v = v.reshape( nz, int(len(v)/nz))
+            v = v.reshape( Nz, int(len(v)/Nz))
             return (M@v).ravel()
         
         def Op_t(v):
             v = v.reshape( nz, int(len(v)/nz))
             return (M.transpose()@v).ravel()
         
-        Op_s = LinearOperator((nz*nx*ny, nz*nx*ny), matvec = Op, rmatvec  = Op_t,dtype = float)
+        Op_s = LinearOperator((nz*nx*ny, Nz*nx*ny), matvec = Op, rmatvec  = Op_t,dtype = float)
         Op_s = pylops.LinearOperator(Op_s)
         
         
         
         Dop = [
-            pylops.FirstDerivative(np.prod(shape), shape,  0, edge=True, kind="backward"),
-            pylops.FirstDerivative(np.prod(shape), shape,  1, edge=True, kind="backward"),
-            pylops.FirstDerivative(np.prod(shape), shape,  2, edge=True, kind="backward")
+            pylops.FirstDerivative(Nz*ny*nx, (Nz, ny, nx),  0, edge=True, kind="backward"),
+            pylops.FirstDerivative(Nz*ny*nx, (Nz, ny, nx),  1, edge=True, kind="backward"),
+            pylops.FirstDerivative(Nz*ny*nx, (Nz, ny, nx),  2, edge=True, kind="backward")
         ]
         
         # mu = 0.01
@@ -421,7 +427,7 @@ class coherentSVIM_analysis:
         print(f'time for one line: {(time.time()  - t)/(shape[1] * shape[2])}')
         
         
-        self.image_inv = dataset.image_inv.reshape(dataset.imageRaw.shape)
+        self.image_inv = dataset.image_inv.reshape(Nz,ny,nx)
         self.image_inv = self.image_inv.transpose(0,2,1)
         
         self.denoised = True
@@ -497,7 +503,7 @@ class coherentSVIM_analysis:
         inverted_xz = np.sum(self.image_inv, 2)
         
         dmdPx_to_sample_ratio = 1.247 # (um/px)
-        aspect_xz = (self.ROI_s_z * dmdPx_to_sample_ratio / len(self.disp_freqs))/0.65
+        aspect_xz = (self.ROI_s_z * dmdPx_to_sample_ratio / self.image_inv.shape[0] )/0.65
         
         # aspect_xz = 0.5
         
@@ -553,13 +559,13 @@ if __name__ == "__main__" :
     
 
         #   ----  1 ----- 
-        file_name = '/Users/marcovitali/Documents/Poli/tesi/ScopeFoundy/coherentSVIM/data/data_28_4_22/220428_124841_coherent_SVIM_phantom2_good.h5'
+        # file_name = '/Users/marcovitali/Documents/Poli/tesi/ScopeFoundy/coherentSVIM/data/data_28_4_22/220428_124841_coherent_SVIM_phantom2_good.h5'
         #   ----  2 ----- 
         # file_name = '/Users/marcovitali/Documents/Poli/tesi/ScopeFoundy/coherentSVIM/data/data_28_4_22/220428_124222_coherent_SVIM_phantom2_good.h5'
         #   ----  3 ----- 
         # file_name = '/Users/marcovitali/Documents/Poli/tesi/ScopeFoundy/coherentSVIM/data/data_28_4_22/220428_125643_coherent_SVIM_phantom2_good.h5'
         #   ----  4 ----- 1
-        # file_name = '/Users/marcovitali/Documents/Poli/tesi/ScopeFoundy/coherentSVIM/data/data_28_4_22/220428_115143_coherent_SVIM_phantom2_good.h5'
+        file_name = '/Users/marcovitali/Documents/Poli/tesi/ScopeFoundy/coherentSVIM/data/data_28_4_22/220428_115143_coherent_SVIM_phantom2_good.h5'
         
         
         # file_name_h5 = file_name + '.h5'
@@ -569,24 +575,24 @@ if __name__ == "__main__" :
         
         
         dataset.merge_pos_neg()
-        # dataset.setROI(814-20,  1132-20, 40) # one bead in dataset 4
+        dataset.setROI(814-20,  1132-20, 40) # one bead in dataset 4
         # dataset.setROI(420,  524, 1000)
         # dataset.setROI(1839-110, 879-110 , 220) # three beads in dataset 1
-        dataset.show_im_raw()
+        # dataset.show_im_raw()
         
-        dataset.choose_freq()
+        dataset.choose_freq() # also removes any duplicate in frequency
         
         #%% 
         
         base = 'cos'
         mu = 0.01
-        lamda = [20, 20, 20]
+        lamda = [22, 22, 22]
         niter_out = 15
         niter_in = 2
         lsqr_niter = 5
         lsqr_damp = 1e-4
         
-        # dataset.invert_and_denoise1D_no_for(base, mu, lamda, niter_out, niter_in)
+        # dataset.invert_and_denoise1D_no_for(base, mu, lamda[0], niter_out, niter_in, lsqr_niter, lsqr_damp)
         dataset.invert_and_denoise3D_v2(base, mu, lamda, niter_out, niter_in, lsqr_niter, lsqr_damp)
         
         dataset.show_inverted_xy()
