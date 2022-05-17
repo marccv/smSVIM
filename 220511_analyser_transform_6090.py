@@ -453,9 +453,6 @@ class coherentSVIM_analysis:
         self.clipped = True
     
     def show_inverted(self):
-        
-        # TODO make  the aspect ratio of the displayedimage match the sampled volume aspect ratio
-        
         pg.image(self.image_inv, title= f"Inverted image (base: {self.base})")        
                
         #keeps the window open running a QT application
@@ -491,12 +488,9 @@ class coherentSVIM_analysis:
         # fig1.colorbar(xz, ax = ax1)
         
     @time_it    
-    def show_inverted_xy(self, plane = 'sum'):
-        
-        if plane == 'sum':
-            inverted_xy = np.sum(self.image_inv, 0)
-        else:
-            inverted_xy = self.image_inv[plane,:,:] # to show just one xy plane
+    def show_inverted_xy(self):
+        inverted_xy = np.sum(self.image_inv, 0)
+        # inverted_xy = (self.image_inv[30,:,:])
         
         fig1=plt.figure()
         fig1.clf()
@@ -509,12 +503,9 @@ class coherentSVIM_analysis:
         cbar.ax.set_ylabel('Counts', rotation=270)
     
     @time_it
-    def show_inverted_xz(self, plane = 'sum'):
-        
-        if plane == 'sum':
-            inverted_xz = np.sum(self.image_inv, 2)
-        else:
-            inverted_xz = self.image_inv[:,:,plane] # to show just one xz plane
+    def show_inverted_xz(self):
+        # inverted_xz = np.sum(self.image_inv, 2)
+        inverted_xz = (self.image_inv[:,:,400])
         
         dmdPx_to_sample_ratio = 1.247 # (um/px)
         aspect_xz = (self.ROI_s_z * dmdPx_to_sample_ratio / self.image_inv.shape[0] )/0.65
@@ -567,7 +558,7 @@ class coherentSVIM_analysis:
         
         tiff.imsave(outputFile , np.uint16(self.image_inv.clip(min = 0)), append = False) 
         
-#%%    
+    
  
 if __name__ == "__main__" :
     
@@ -583,7 +574,7 @@ if __name__ == "__main__" :
         
         
         # ------ with diffurer
-        # file_name = '/Users/marcovitali/Documents/Poli/tesi/ScopeFoundy/coherentSVIM/data/220509_gfp_plant/220509_163108_coherent_SVIM_plant1_elongation_diffuser.h5'
+        file_name = '/Users/marcovitali/Documents/Poli/tesi/ScopeFoundy/coherentSVIM/data/220509_gfp_plant/220509_163108_coherent_SVIM_plant1_elongation_diffuser.h5'
         # ------ Diffuser off
         # file_name = '/Users/marcovitali/Documents/Poli/tesi/ScopeFoundy/coherentSVIM/data/220509_gfp_plant/220509_163256_coherent_SVIM_plant1_elongation_diffuser_stoppeed.h5'
         # ------ No diffuser
@@ -592,29 +583,15 @@ if __name__ == "__main__" :
         # file_name = '/Users/marcovitali/Documents/Poli/tesi/ScopeFoundy/coherentSVIM/data/220509_gfp_plant/220509_172152_coherent_SVIM_plant2.h5'
         
         
-        # ------ plant in the center, left and right?, no diffuser
-        # file_name = "D:\\data\\coherent_svim\\220509_gfp_plant\\220509_150543_coherent_SVIM_plant1.h5"
-        # file_name = "D:\\data\\coherent_svim\\220509_gfp_plant\\220509_150951_coherent_SVIM_plant1.h5"
-        # file_name = "D:\\data\\coherent_svim\\220509_gfp_plant\\220509_151407_coherent_SVIM_plant1.h5"
         
-        # ------ transposed pattern, there was the problem that the frequencies were a bit unclear and there was a divide by zero traceback
-        # file_name = "D:\\data\\coherent_svim\\220509_gfp_plant\\220509_151641_coherent_SVIM_plant1_transp.h5"
-        # file_name = "D:\\data\\coherent_svim\\220509_gfp_plant\\220509_151812_coherent_SVIM_plant1_transp.h5"
-        # file_name = "D:\\data\\coherent_svim\\220509_gfp_plant\\220509_152405_coherent_SVIM_plant1_transp_20pz_z.h5"
-        
-        # ------ different exposure times
-        # file_name = "D:\\data\\coherent_svim\\220509_gfp_plant\\220509_153249_coherent_SVIM_plant1_tip_200ms.h5"
-        file_name = "D:\\data\\coherent_svim\\220509_gfp_plant\\220509_153510_coherent_SVIM_plant1_tip_800ms.h5"
-        
-        
-        # (220511) H2O2 stimulus
+        # H2O2 stimulus
         
         # file_name = '/Users/marcovitali/Documents/Poli/tesi/ScopeFoundy/coherentSVIM/data/220510_gfp_plant/renamed/pog_h2o2_1.h5'
         # file_name = "D:\\data\\coherent_svim\\220511_camaleon_plant\\220511_114841_coherent_SVIM_cy36_atp_second_round_ (7).h5"
         # file_name = "D:\\data\coherent_svim\\220511_camaleon_plant\\220511_131028_coherent_SVIM_cy36_atp_third_round.h5"
         # file_name = "D:\\data\coherent_svim\\220511_gfp_plant\\220511_145138_coherent_SVIM_ (90).h5"
         # file_name = "D:\\data\\coherent_svim\\220511_gfp_plant\\220511_155605_coherent_SVIM_rog_h2o2_second_round_ (54).h5"
-        # file_name = "D:\\data\\coherent_svim\\220511_gfp_plant\\220511_173125_coherent_SVIM_rog_h2o2_leaf_ (1).h5"
+        file_name = "D:\\data\\coherent_svim\\220511_gfp_plant\\220511_173125_coherent_SVIM_rog_h2o2_leaf_ (1).h5"
         
         
         # file_name_h5 = file_name + '.h5'
@@ -636,7 +613,7 @@ if __name__ == "__main__" :
         
         dataset.choose_freq() # also removes any duplicate in frequency
         
-        #%% invert the raw image
+        #%% 
         
         base = 'cos'
         mu = 0.01
@@ -656,16 +633,23 @@ if __name__ == "__main__" :
         # dataset.show_inverted_xy()
         # dataset.show_inverted_xz()
         
-        #%% show a single line profile along the z direction
+        #%%
         
-
-        fig, ax = plt.subplots()
-        ax.plot(dataset.image_inv[:,20,20],'x-', label = f'{dataset.param}')
-        ax.legend()
+        temp = dataset.image_inv.copy()
+        
+        dataset.image_inv = dataset.image_inv.reshape(Nz,ny,nx)
+        # dataset.image_inv = self.image_inv.transpose(0,2,1)
+        
+        dataset.show_inverted_xy()
+        dataset.show_inverted_xz()
+        
+        # fig, ax = plt.subplots()
+        # ax.plot(dataset.image_inv[:,20,20],'x-', label = f'{dataset.param}')
+        # ax.legend()
         
         
         
-        #%% save the inverted image
+        #%%     
 
         # save_file = 'Users/marcovitali/Documents/Poli/tesi/ScopeFoundy/coherentSVIM/data/data_28_4_22/220428_124841_coherent_SVIM_phantom2_good_inverted.tif'        
         
@@ -680,7 +664,7 @@ if __name__ == "__main__" :
         
         try:
         
-            fname = "D:\\LabPrograms\\ScopeFoundry_POLIMI\\smSVIM_microscope_analyser\\analysed\\220511\\volume_1_rog_leaf.h5"
+            fname = "D:\\LabPrograms\\ScopeFoundry_POLIMI\\smSVIM_microscope_analyser\\analysed\\volume_1_rog_leaf.h5"
             parent = h5py.File(fname,'w')
     
             # create groups
@@ -695,13 +679,13 @@ if __name__ == "__main__" :
             # create attributes (not in the parents)
             results.attrs['sample'] = 'GFP'
             results.attrs['microscope_type'] = 'SIM'
-            results.attrs['inversion_parameters'] = dataset.param
+            results.attrs['denoise_weight'] = 0.5
 
         finally:
             parent.close()
             
             
-        #%% load a saved reconstructed image
+        #%%
         
         import h5py
         
@@ -736,17 +720,13 @@ if __name__ == "__main__" :
         sys.exit ( "End of test")
         
         
-        #%% invert a series of time frames and save for each of them a sigle image (given xy plane or sum along z) in the list called stack
-        # they have been reanmed in a quick and dirty way using MS file explorer to have a sequential name
+        #%%
         
         # fname = "D:\\data\\coherent_svim\\220511_camaleon_plant\\220511_114841_coherent_SVIM_cy36_atp_second_round_ ("
         # fname = "D:\\data\\coherent_svim\\220511_camaleon_plant\\220511_131028_coherent_SVIM_cy36_atp_third_round_ ("
-        
-        # >> In the next dataset we can see a response to the external stimulus << 
-        fname= "D:\\data\\coherent_svim\\220511_gfp_plant\\220511_155605_coherent_SVIM_rog_h2o2_first_round_ ("
-        
+        # fname= "D:\\data\coherent_svim\\220511_gfp_plant\\220511_145138_coherent_SVIM_ ("
         # fname= "D:\\data\\coherent_svim\\220511_gfp_plant\\220511_155605_coherent_SVIM_rog_h2o2_second_round_ ("
-        # fname = "D:\\data\\coherent_svim\\220511_gfp_plant\\220511_173125_coherent_SVIM_rog_h2o2_leaf_ ("
+        fname = "D:\\data\\coherent_svim\\220511_gfp_plant\\220511_173125_coherent_SVIM_rog_h2o2_leaf_ ("
         
         
         stack = []
@@ -771,13 +751,12 @@ if __name__ == "__main__" :
         
         # import h5py
         
-        #%% save in a H5 file the stack we have just created
-        
+        #%%
         stack = np.array(stack)
         
         try:
         
-            fname = "D:\\LabPrograms\\ScopeFoundry_POLIMI\\smSVIM_microscope_analyser\\analysed\\220511\\ro_gfp\\time_laps_rog_leaf.h5"
+            fname = "D:\\LabPrograms\\ScopeFoundry_POLIMI\\smSVIM_microscope_analyser\\analysed\\time_laps_rog_leaf.h5"
             parent = h5py.File(fname,'w')
     
             # create groups

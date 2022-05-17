@@ -1,2 +1,5 @@
 data/*
 smSVIM_microscope_analyser/__pycache__/*
+*.h5
+*.tif
+*.avi

@@ -174,27 +174,26 @@ class coherentSvimMeasurement(Measurement):
     def set_f_min(self,f_min):
         
         if (f_min*10)%5 != 0:
-            
             f_min = round(f_min*2)/2
             self.settings['f_min'] = f_min
-        else:
-            if hasattr(self, 'num_frames'):
-                
-                self.freqs = self.calculate_freq(f_min, self.settings['f_max'], self.settings['ROI_s_z'] )     
-                self.settings['num_frames']  = (1 + self.settings['PosNeg']) * ( len(self.freqs))
+        elif f_min >  self.settings['f_max']:
+            self.settings['f_min'] = self.settings['f_max']
+        
+        elif hasattr(self, 'num_frames'):
+            self.freqs = self.calculate_freq(f_min, self.settings['f_max'], self.settings['ROI_s_z'] )     
+            self.settings['num_frames']  = (1 + self.settings['PosNeg']) * len(self.freqs)
             
     def set_f_max(self,f_max):
         
-        
         if (f_max*10)%5 != 0:
-            
             f_max = round(f_max*2)/2
             self.settings['f_max'] = f_max
-        else:
-            if hasattr(self, 'num_frames'):
-                
-                self.freqs = self.calculate_freq(self.settings['f_min'], f_max, self.settings['ROI_s_z'] )     
-                self.settings['num_frames']  = (1 + self.settings['PosNeg']) * ( len(self.freqs))
+        elif f_max <  self.settings['f_min']:
+            self.settings['f_max'] = self.settings['f_min']
+        
+        elif hasattr(self, 'num_frames'):
+            self.freqs = self.calculate_freq(self.settings['f_min'], f_max, self.settings['ROI_s_z'] )     
+            self.settings['num_frames']  = (1 + self.settings['PosNeg']) * len(self.freqs)
      
     def set_PosNeg(self, PosNeg):
         
@@ -209,7 +208,7 @@ class coherentSvimMeasurement(Measurement):
         
         if hasattr(self, 'num_frames'):
             self.freqs = self.calculate_freq(self.settings['f_min'], self.settings['f_max'], ROI_s_z )    
-            self.settings['num_frames']  =(1 + self.settings['PosNeg']) * ( len(self.freqs))
+            self.settings['num_frames']  =(1 + self.settings['PosNeg']) * len(self.freqs)
            
     def calculate_margin(self):
         
@@ -264,15 +263,16 @@ class coherentSvimMeasurement(Measurement):
         self.f_min = self.settings.New('f_min', dtype=float, initial=0.0, spinbox_step= 0.5 , spinbox_decimals= 1, vmin = 0)
         self.f_max = self.settings.New('f_max', dtype=float, initial=30.0 , spinbox_step= 0.5, spinbox_decimals=1, vmin = 0)
         self.PosNeg = self.settings.New('PosNeg', dtype = bool, initial = True)
-        self.num_frames = self.settings.New('num_frames',ro = True, dtype = int, initial = 70) 
+        self.num_frames = self.settings.New('num_frames',ro = True, dtype = int, initial = 70)    # TODO The initial value of this setting is critical: so far it must be updated manually if one changes any other initial value. Should we calculate self.freqs during the setup period and put here initial = len(self.freqs)?
         self.ROI_s_z = self.settings.New('ROI_s_z', dtype=int, initial=200, unit = 'px' )
         self.settings.New('ROI_s_y', dtype=int, initial=600, unit = 'px' )
         self.settings.New('transpose_pattern', dtype=bool, initial=False )
         self.exposure = self.settings.New("exposure", dtype = float, initial=100, vmin=1.004, vmax = 1e4, spinbox_step=10, spinbox_decimals=3, unit="ms")
         self.add_operation("read_subarray_vsize", self.read_subarray_vsize)
         self.settings.New('edge_trigger_margin', dtype = float, initial = self.calculate_margin(), vmin = 0.0, ro=True, spinbox_decimals = 3 , unit = 'ms')
-        self.settings.New('effective_fps', dtype = float, initial = self.calculate_eff_fps(), vmin = 0.0, ro = True, spinbox_decimals = 2, unit = 'fps') # TODO make autoupdate
-        
+        self.settings.New('effective_fps', dtype = float, initial = self.calculate_eff_fps(), vmin = 0.0, ro = True, spinbox_decimals = 2, unit = 'fps')
+        self.settings.New('skip_upload', dtype=bool, initial=False )
+        self.settings.New('obs_time', dtype=int, initial=60, unit = 's' )
  
         #set functions
         self.f_min.hardware_set_func = self.set_f_min
@@ -282,6 +282,8 @@ class coherentSvimMeasurement(Measurement):
         self.ROI_s_z.hardware_set_func = self.set_ROI_s_z
         
         
+        # TODO This does not actually work, the wrong initial value for num_frames is not corrected! 
+        self.settings['PosNeg'] = True # TODO decide if this is a good solution for the problem of self.num_frames updating on setup. This line should also ensures that self.freqs is created 
         
     def setup_figure(self):
         """
@@ -359,190 +361,210 @@ class coherentSvimMeasurement(Measurement):
         self.image = np.reshape(self.np_data,(self.eff_subarrayv, self.eff_subarrayh))
         self.camera.hamamatsu.stopAcquisition()
         
-        print("\n****************\nLoading pattern\n****************\n")
-        t = time.time()
-        num_frames = self.settings['num_frames']
+        self.settings['skip_upload']  = False
         
+        n_laps = int(np.ceil(self.settings['obs_time']/( self.settings['num_frames'] /self.settings['effective_fps'])))
+        print(n_laps)
         
-        self.settings['edge_trigger_margin'] = self.calculate_margin()
-        self.dmd_hw.settings['exposure'] = int(exposure*1e3 + self.settings['edge_trigger_margin']*1e3) # TODO: check this extra time
-        exposure_dmd = [int(exposure*1e3 + self.settings['edge_trigger_margin']*1e3) ]*num_frames
-        self.settings['effective_fps'] =  self.calculate_eff_fps()
-        
-
-        dark_time = [self.dmd_hw.dark_time.val]*num_frames
-        trigger_input = [self.dmd_hw.trigger_input.val]*num_frames
-        trigger_output = [self.dmd_hw.trigger_output.val]*num_frames
-        rep = num_frames
-       
-        # I tell the camera how manìy frames to record
-        self.camera.settings['number_frames'] = num_frames
-        self.camera.settings['exposure_time'] = exposure*1e-3
-        
-        
-        transpose_pattern = self.settings['transpose_pattern']
-        self.dmd_hw.settings['transpose_pattern'] = transpose_pattern
-        self.dmd_hw.settings['crop_squared'] = True # I always crop
-
-        crop_squared_size = [self.settings['ROI_s_z'], self.settings['ROI_s_y']]
-          
-        if self.dmd_hw.squared_pattern_origin.val == 'rectangle_center':
-            centered = True
-        else:
-            centered = False
-        
-        print(f'\nCreating {num_frames} patterns...\n\nTheoretical frequencies: ', self.freqs)
-        print('\nPosNeg: ', self.settings['PosNeg'])
-        print('\nPlease wait...', end = '')
-        
-        mask = create_rectangle_mask(crop_squared_size)
-        
-        # common initial phase
-        phase = 0
-        
-        images = []
-        freqs_out = []
-        
-        if self.settings['PosNeg'] == False:
-             
-            for freq in self.freqs:
-
-                im_pos, freq_out = create_squared_pattern_from_freq(freq,transpose_pattern, crop_squared_size, centered, phase)
-                
-                images.append(im_pos)
-                freqs_out.append(freq_out)
-        
-        else:
-            #PosNeg
-            for freq in self.freqs:
-
-                im_pos, freq_out = create_squared_pattern_from_freq(freq,transpose_pattern, crop_squared_size, centered, phase)
-                im_neg = np.uint8(np.logical_not(im_pos)*1)
-                
-                images.append(im_pos)
-                images.append(im_neg)
-                freqs_out.append(freq_out)
-                    
-                    
-        images_arr = np.array(images)
-        cropped_images = list(images_arr*mask)
+        for i in range(n_laps):
             
-        print(f'     >>     Pattern creation completed ({time.time() - t:.3f} s)\n')
-        print('The actual displayed frequencies are: ', freqs_out)
+            print(i)
+            
+            self.freqs = self.calculate_freq(self.settings['f_min'], self.settings['f_max'], self.settings['ROI_s_z'] ) # TODO See problem described in the setup
+            self.settings['num_frames']  = (1 + self.settings['PosNeg']) * len(self.freqs)
+            num_frames = self.settings['num_frames']
+            
+            self.settings['edge_trigger_margin'] = self.calculate_margin()
+            self.dmd_hw.settings['exposure'] = int(exposure*1e3 + self.settings['edge_trigger_margin']*1e3)
+            exposure_dmd = [int(exposure*1e3 + self.settings['edge_trigger_margin']*1e3) ]*num_frames
+            self.settings['effective_fps'] =  self.calculate_eff_fps()
+            
+            # I tell the camera how manìy frames to record
+            self.camera.settings['number_frames'] = num_frames
+            self.camera.settings['exposure_time'] = exposure*1e-3
+            
+            if not self.settings['skip_upload']:
+            
+                print("\n****************\nLoading pattern\n****************\n")
+                t = time.time()
+                
+                
         
-
-        self.dmd_hw.dmd.def_sequence(cropped_images, exposure_dmd,trigger_input,dark_time,trigger_output,rep)
+                dark_time = [self.dmd_hw.dark_time.val]*num_frames
+                trigger_input = [self.dmd_hw.trigger_input.val]*num_frames
+                trigger_output = [self.dmd_hw.trigger_output.val]*num_frames
+                rep = num_frames
+               
+                
+                transpose_pattern = self.settings['transpose_pattern']
+                self.dmd_hw.settings['transpose_pattern'] = transpose_pattern
+                self.dmd_hw.settings['crop_squared'] = True # I always crop
         
-        print("\n****************\nLoad squared ends\n****************\n")
+                crop_squared_size = [self.settings['ROI_s_z'], self.settings['ROI_s_y']]
+                  
+                if self.dmd_hw.squared_pattern_origin.val == 'rectangle_center':
+                    centered = True
+                else:
+                    centered = False
+                
+                print(f'\nCreating {num_frames} patterns...\n\nTheoretical frequencies: ', self.freqs)
+                print('\nPosNeg: ', self.settings['PosNeg'])
+                print('\nPlease wait...', end = '')
+                
+                mask = create_rectangle_mask(crop_squared_size)
+                
+                # common initial phase
+                phase = 0
+                
+                images = []
+                freqs_out = []
+                
+                if self.settings['PosNeg'] == False:
+                     
+                    for freq in self.freqs:
         
+                        im_pos, freq_out = create_squared_pattern_from_freq(freq,transpose_pattern, crop_squared_size, centered, phase)
+                        
+                        images.append(im_pos)
+                        freqs_out.append(freq_out)
+                
+                else:
+                    #PosNeg
+                    for freq in self.freqs:
         
-
+                        im_pos, freq_out = create_squared_pattern_from_freq(freq,transpose_pattern, crop_squared_size, centered, phase)
+                        im_neg = np.uint8(np.logical_not(im_pos)*1)
+                        
+                        images.append(im_pos)
+                        images.append(im_neg)
+                        freqs_out.append(freq_out)
+                            
+                            
+                images_arr = np.array(images)
+                cropped_images = list(images_arr*mask)
+                    
+                print(f'     >>     Pattern creation completed ({time.time() - t:.3f} s)\n')
+                print('The actual displayed frequencies are: ', freqs_out)
+                
         
-        # Set trigger to external
-
-        self.camera.hamamatsu.setTriggerSource("external")
-        self.camera.hamamatsu.setTriggerMode("normal")
-        self.camera.hamamatsu.setTriggerPolarity("positive")
-        self.camera.hamamatsu.setTriggerActive("edge")
-
-        print('\nTrigger set to external: edge mode')
-        
-        #=====================================
-        # Start acquisition
-        #=====================================
-        
-        print('\nAcquisition starts')
-        
-        self.frame_index = -1
-        self.eff_subarrayh = int(self.camera.subarrayh.val/self.camera.binning.val)
-        self.eff_subarrayv = int(self.camera.subarrayv.val/self.camera.binning.val)
-        self.camera.read_from_hardware()
-        self.camera.hamamatsu.startAcquisition()
+                self.dmd_hw.dmd.def_sequence(cropped_images, exposure_dmd,trigger_input,dark_time,trigger_output,rep)
+                
+                print("\n****************\nLoad squared ends\n****************\n")
+                
+            else:
+                print('WARNING!\nNo images uploaded: the DMD uses the last uploaded sequence of patterns')
     
-        frame_index = 0
-        
-        self.initH5()
-
-        #=====================================
-        # Shutter open
-        #=====================================
-        
-        print('\nShutter open')
-        
-        t_shutter_open = time.time()
-        
-        self.shutter_hw.shutter.open_shutter()
-        time.sleep(0.3) #seconds
-        
-        #=====================================
-        # DMD start
-        #=====================================
-        
-        self.dmd_hw.dmd.startsequence()
-        
-        
-        #=====================================
-        # Get and save frames
-        #=====================================
-        
-        print('\nSaving frames')
-        
-        while frame_index < self.camera.hamamatsu.number_image_buffers:
-
-            # Get frames.
-            #The camera stops acquiring once the buffer is terminated (in snapshot mode)
-            [frames, dims] = self.camera.hamamatsu.getFrames()
+    
+            self.settings['skip_upload'] = True        
+    
+    
+            # Set trigger to external
+    
+            self.camera.hamamatsu.setTriggerSource("external")
+            self.camera.hamamatsu.setTriggerMode("normal")
+            self.camera.hamamatsu.setTriggerPolarity("positive")
+            self.camera.hamamatsu.setTriggerActive("edge")
+    
+            print('\nTrigger set to external: edge mode')
             
-           
-            for aframe in frames:
-                
-                self.np_data = aframe.getData()  
-                self.image = np.reshape(self.np_data,(self.eff_subarrayv, self.eff_subarrayh)) 
-                
-                self.image_h5[frame_index,:,:] = self.image
-                self.h5file.flush() 
-                                    
-                frame_index += 1
-                self.frame_index = frame_index 
-                
-                print(frame_index)
+            #=====================================
+            # Start acquisition
+            #=====================================
             
-                if self.interrupt_measurement_called:
-                    break    
-   
-        #=====================================
-        # Shutter close
-        #=====================================
+            print('\nAcquisition starts')
+            
+            self.frame_index = -1
+            self.eff_subarrayh = int(self.camera.subarrayh.val/self.camera.binning.val)
+            self.eff_subarrayv = int(self.camera.subarrayv.val/self.camera.binning.val)
+            self.camera.read_from_hardware()
+            self.camera.hamamatsu.startAcquisition()
         
-        
-        self.shutter_hw.shutter.close_shutter()
-        print(f'\nShutter closed. Opened for {time.time() - t_shutter_open:.3f} s')
-        
-        #=====================================
-        # Stop acquisition
-        #=====================================
-        
-        self.camera.hamamatsu.stopAcquisition()
-        self.h5file.close() 
-
-        #=====================================
-        # Set trigger to internal
-        #=====================================
-        
-        
-        self.camera.hamamatsu.setTriggerSource("internal")
-        self.camera.hamamatsu.setTriggerMode("normal")
-        self.camera.hamamatsu.setTriggerPolarity("positive")
-        self.camera.hamamatsu.setTriggerActive("edge")
-        print('\nTrigger set to internal')
-        
-        
-        
-        #=====================================
-        # Stop DMD pattern ??????
-        #=====================================
-        
-        # self.dmd_hw.dmd.stopsequence()
+            frame_index = 0
+            
+            self.initH5()
+    
+            #=====================================
+            # Shutter open
+            #=====================================
+            
+            print('\nShutter open')
+            
+            t_shutter_open = time.time()
+            
+            self.shutter_hw.shutter.open_shutter()
+            time.sleep(0.3) #seconds
+            
+            #=====================================
+            # DMD start
+            #=====================================
+            
+            self.dmd_hw.dmd.startsequence()
+            
+            
+            #=====================================
+            # Get and save frames
+            #=====================================
+            
+            print('\nSaving frames')
+            
+            while frame_index < self.camera.hamamatsu.number_image_buffers:
+    
+                # Get frames.
+                #The camera stops acquiring once the buffer is terminated (in snapshot mode)
+                [frames, dims] = self.camera.hamamatsu.getFrames()
+                
+               
+                for aframe in frames:
+                    
+                    self.np_data = aframe.getData()  
+                    self.image = np.reshape(self.np_data,(self.eff_subarrayv, self.eff_subarrayh)) 
+                    
+                    self.image_h5[frame_index,:,:] = self.image
+                    self.h5file.flush() 
+                                        
+                    frame_index += 1
+                    self.frame_index = frame_index 
+                    
+                    print(frame_index)
+                
+                    if self.interrupt_measurement_called:
+                        break    
+       
+            #=====================================
+            # Shutter close
+            #=====================================
+            
+            
+            self.shutter_hw.shutter.close_shutter()
+            print(f'\nShutter closed. Opened for {time.time() - t_shutter_open:.3f} s')
+            
+            #=====================================
+            # Stop acquisition
+            #=====================================
+            
+            self.camera.hamamatsu.stopAcquisition()
+            self.h5file.close() 
+    
+            #=====================================
+            # Set trigger to internal
+            #=====================================
+            
+            
+            self.camera.hamamatsu.setTriggerSource("internal")
+            self.camera.hamamatsu.setTriggerMode("normal")
+            self.camera.hamamatsu.setTriggerPolarity("positive")
+            self.camera.hamamatsu.setTriggerActive("edge")
+            print('\nTrigger set to internal')
+            
+            
+            
+            #=====================================
+            # Set skip_upload to false?
+            #=====================================
+            
+            # self.settings['skip_upload'] = False
+            
+            
         
         
         

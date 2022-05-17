@@ -19,7 +19,7 @@ class dct_6090:
         
         # It receives the actual frequencies used to illuminate the sample
         
-        self.N = int(np.ceil(max(disp_f)*2)) # sort of Shannon Th.
+        self.N = int(np.ceil(max(disp_f)*2) + 1) # sort of Shannon Th.
         
         # I throw away doubles
         mask = np.append(np.diff(disp_f)!= 0, True)

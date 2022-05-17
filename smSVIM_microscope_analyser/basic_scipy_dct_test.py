@@ -12,11 +12,11 @@ import matplotlib.pyplot as plt
 
 
 
-Y = np.zeros([1,100])
-Y[0,1] = 1
+Y = np.zeros([1,67])
+Y[0,34] = 1
 # Y[0,3] = 0.5
 
-y = sp_fft.idct(Y, norm = 'ortho')
+y = sp_fft.dct(Y, norm = 'ortho')
 
 
 
@@ -25,12 +25,7 @@ fig1.clf()
 
 ax1=fig1.add_subplot(111)
 
-
-# fig1.text (0.2 ,0.92,'a)  $\qquad$Signal v. time', fontsize = 16)
 ax1.plot( y[0,:])
-# ax1.set_xlabel('Time ($\mu s$)', fontsize = 14)
-# ax1.set_ylabel('Voltage (V)', fontsize = 14);
-
 
 
 
