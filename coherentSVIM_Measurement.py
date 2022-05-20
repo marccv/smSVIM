@@ -153,8 +153,13 @@ class coherentSvimMeasurement(Measurement):
     name = "coherent_SVIM"
     
     
-    def calculate_approx_time_frames_n(self):
-        return int(np.ceil(    self.settings['obs_time'] / ( (self.settings['num_frames']/self.settings['effective_fps']) + self.settings['dark_time'] + 0.3 )    ))  # 0.3s is the trigger dead time we set
+    def calculate_time_frames_n(self):
+        
+        if not self.settings['time_laps']:
+            return int(1)
+        else:
+            # 0.3s is the trigger dead time we set, 0.24 is an empirical dead computational time
+            return int(np.ceil(    self.settings['obs_time'] / ( (self.settings['num_frames']/self.settings['effective_fps']) + self.settings['dark_time'] + 0.3 + 0.24 )    ))  
      
     
     def calculate_freq(self, f_min, f_max, ROI_s):
@@ -187,8 +192,8 @@ class coherentSvimMeasurement(Measurement):
             self.freqs = self.calculate_freq(f_min, self.settings['f_max'], self.settings['ROI_s_z'] )     
             self.settings['num_frames']  = (1 + self.settings['PosNeg']) * len(self.freqs)
         
-            if hasattr(self, 'approx_time_frames_n'):
-                self.settings['approx_time_frames_n'] = self.calculate_approx_time_frames_n()
+            if hasattr(self, 'time_frames_n'):
+                self.settings['time_frames_n'] = self.calculate_time_frames_n()
             
     def set_f_max(self,f_max):
         
@@ -202,8 +207,8 @@ class coherentSvimMeasurement(Measurement):
             self.freqs = self.calculate_freq(self.settings['f_min'], f_max, self.settings['ROI_s_z'] )     
             self.settings['num_frames']  = (1 + self.settings['PosNeg']) * len(self.freqs)
      
-            if hasattr(self, 'approx_time_frames_n'):
-                self.settings['approx_time_frames_n'] = self.calculate_approx_time_frames_n()
+            if hasattr(self, 'time_frames_n'):
+                self.settings['time_frames_n'] = self.calculate_time_frames_n()
                 
     def set_PosNeg(self, PosNeg):
         
@@ -214,8 +219,8 @@ class coherentSvimMeasurement(Measurement):
                 self.freqs = self.calculate_freq(self.settings['f_min'], self.settings['f_max'], self.settings['ROI_s_z'] )
                 self.settings['num_frames']  =(1 + PosNeg) * (len(self.freqs))
                 
-                if hasattr(self, 'approx_time_frames_n'):
-                    self.settings['approx_time_frames_n'] = self.calculate_approx_time_frames_n()
+            if hasattr(self, 'time_frames_n'):
+                    self.settings['time_frames_n'] = self.calculate_time_frames_n()
                 
     def set_ROI_s_z(self, ROI_s_z):
         
@@ -223,8 +228,8 @@ class coherentSvimMeasurement(Measurement):
             self.freqs = self.calculate_freq(self.settings['f_min'], self.settings['f_max'], ROI_s_z )    
             self.settings['num_frames']  =(1 + self.settings['PosNeg']) * len(self.freqs)
             
-            if hasattr(self, 'approx_time_frames_n'):
-                self.settings['approx_time_frames_n'] = self.calculate_approx_time_frames_n()
+            if hasattr(self, 'time_frames_n'):
+                self.settings['time_frames_n'] = self.calculate_time_frames_n()
            
     def calculate_margin(self):
         
@@ -244,8 +249,8 @@ class coherentSvimMeasurement(Measurement):
         self.camera.settings['exposure_time'] = exposure*1e-3
         self.settings['effective_fps'] =  self.calculate_eff_fps()
         
-        if hasattr(self, 'approx_time_frames_n'):
-            self.settings['approx_time_frames_n'] = self.calculate_approx_time_frames_n()
+        if hasattr(self, 'time_frames_n'):
+            self.settings['time_frames_n'] = self.calculate_time_frames_n()
      
 
     def read_subarray_vsize(self):
@@ -253,18 +258,21 @@ class coherentSvimMeasurement(Measurement):
         self.settings['edge_trigger_margin'] = self.calculate_margin()
         self.settings['effective_fps'] =  self.calculate_eff_fps()   
         
-        if hasattr(self, 'approx_time_frames_n'):
-            self.settings['approx_time_frames_n'] = self.calculate_approx_time_frames_n()
-        
+        if hasattr(self, 'time_frames_n'):
+            self.settings['time_frames_n'] = self.calculate_time_frames_n()
+    
+    def set_time_laps(self, time_laps):
+        if hasattr(self, 'time_frames_n'):
+            self.settings['time_frames_n'] = self.calculate_time_frames_n()
         
     def set_obs_time(self, obs_time):
         
-        if hasattr(self, 'approx_time_frames_n'):
-            self.settings['approx_time_frames_n'] = self.calculate_approx_time_frames_n()
+        if hasattr(self, 'time_frames_n'):
+            self.settings['time_frames_n'] = self.calculate_time_frames_n()
     def set_dark_time(self, dark_time):
         
-        if hasattr(self, 'approx_time_frames_n'):
-            self.settings['approx_time_frames_n'] = self.calculate_approx_time_frames_n()
+        if hasattr(self, 'time_frames_n'):
+            self.settings['time_frames_n'] = self.calculate_time_frames_n()
         
             
         
@@ -303,10 +311,10 @@ class coherentSvimMeasurement(Measurement):
         self.settings.New('edge_trigger_margin', dtype = float, initial = self.calculate_margin(), vmin = 0.0, ro=True, spinbox_decimals = 3 , unit = 'ms')
         self.settings.New('effective_fps', dtype = float, initial = self.calculate_eff_fps(), vmin = 0.0, ro = True, spinbox_decimals = 2, unit = 'fps')
         self.settings.New('skip_upload', dtype=bool, initial=False )
-        self.settings.New('time_laps', dtype = bool, initial = False)
+        self.time_laps = self.settings.New('time_laps', dtype = bool, initial = False)
         self.obs_time = self.settings.New('obs_time', dtype=float, initial= 0.0, vmin = 0, spinbox_decimals = 3, spinbox_step = 10.0,  unit = 's' )
         self.dark_time = self.settings.New('dark_time', dtype = float, initial = 0.0, vmin = 0, spinbox_decimals = 3, spinbox_step = 1, unit = 's')
-        self.approx_time_frames_n  = self.settings.New('approx_time_frames_n', dtype = int, initial = 0, vmin = 0, ro = True)
+        self.time_frames_n  = self.settings.New('time_frames_n', dtype = int, initial = 1, vmin = 1, ro = True)
  
     
         #set functions
@@ -315,6 +323,7 @@ class coherentSvimMeasurement(Measurement):
         self.PosNeg.hardware_set_func = self.set_PosNeg
         self.exposure.hardware_set_func = self.set_exposure
         self.ROI_s_z.hardware_set_func = self.set_ROI_s_z
+        self.time_laps.hardware_set_func = self.set_time_laps
         self.obs_time.hardware_set_func = self.set_obs_time
         self.dark_time.hardware_set_func = self.set_dark_time
         
@@ -399,7 +408,6 @@ class coherentSvimMeasurement(Measurement):
         self.image = np.reshape(self.np_data,(self.eff_subarrayv, self.eff_subarrayh))
         self.camera.hamamatsu.stopAcquisition()
         
-        self.settings['skip_upload']  = False
         
         
         self.freqs = self.calculate_freq(self.settings['f_min'], self.settings['f_max'], self.settings['ROI_s_z'] ) # TODO See problem described in the setup
@@ -488,18 +496,19 @@ class coherentSvimMeasurement(Measurement):
         elif not self.settings['time_laps'] :
             print('WARNING!\nNo images uploaded: the DMD uses the last uploaded sequence of patterns')
 
+        
+        self.initH5()
+
+        # for loop for time laps
     
-        # while loop for time laps
-    
-        exit_flag = False
-        i = 1
         
         t_init = time.time()  # we record the initial time after the first upload
-        while not exit_flag:
+        
+        time_frames_n = self.settings['time_frames_n']
+        for time_index in range(time_frames_n):
             
-            print(f' --- Volume acqusition number {i} ---')
-            i += 1 
-    
+            print(f' --- Volume acqusition number {time_index+1}/{time_frames_n} ---')
+            
             # Set trigger to external
     
             self.camera.hamamatsu.setTriggerSource("external")
@@ -523,8 +532,6 @@ class coherentSvimMeasurement(Measurement):
         
             frame_index = 0
             
-            self.initH5()
-    
             #=====================================
             # Shutter open
             #=====================================
@@ -541,7 +548,6 @@ class coherentSvimMeasurement(Measurement):
             #=====================================
             
             self.dmd_hw.dmd.startsequence()
-            
             
             #=====================================
             # Get and save frames
@@ -561,7 +567,7 @@ class coherentSvimMeasurement(Measurement):
                     self.np_data = aframe.getData()  
                     self.image = np.reshape(self.np_data,(self.eff_subarrayv, self.eff_subarrayh)) 
                     
-                    self.image_h5[frame_index,:,:] = self.image
+                    self.image_h5[time_index][frame_index,:,:] = self.image
                     self.h5file.flush() 
                                         
                     frame_index += 1
@@ -585,7 +591,7 @@ class coherentSvimMeasurement(Measurement):
             #=====================================
             
             self.camera.hamamatsu.stopAcquisition()
-            self.h5file.close() 
+            
     
             #=====================================
             # Set trigger to internal
@@ -605,41 +611,29 @@ class coherentSvimMeasurement(Measurement):
             #=====================================
             
             if not self.settings['time_laps']:
-                exit_flag = True
+                break # redundant since if setting time_laps is false time_framse_n = 1
                 
             else:
                 time.sleep(self.settings['dark_time']) #seconds
                 time_end_of_frame = time.time() - t_init
-                exit_flag = time_end_of_frame  > self.settings['obs_time'] #seconds
                 print(f'Total time elapsed: {time_end_of_frame:.3f} s\n')
-                
-            
-            
+        
+        # out of for loop
+        self.h5_group.attrs['measure_duration'] = time_end_of_frame
+        self.h5file.close()     
         
         
         
         print('\n======================================\nCoherent SVIM measurement has finished\n======================================\n\n')
         
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
+  
     
+        
     def initH5(self):
-        """
-        Initialization operations for the h5 file.
-        """
+        
         def create_saving_directory():
             if not os.path.isdir(self.app.settings['save_dir']):
-                os.makedirs(self.app.settings['save_dir'])
-            
+                os.makedirs(self.app.settings['save_dir'])    
         
         create_saving_directory()
         
@@ -656,20 +650,21 @@ class coherentSvimMeasurement(Measurement):
         self.h5file = h5_io.h5_base_file(app=self.app, measurement=self, fname = fname)
         self.h5_group = h5_io.h5_create_measurement_group(measurement=self, h5group=self.h5file)
         
-        
         img_size = self.image.shape
-        length = self.camera.hamamatsu.number_image_buffers
-        self.image_h5 = self.h5_group.create_dataset( name  = 't0/c0/image', 
-                                                      shape = ( length, img_size[0], img_size[1]),
-                                                      dtype = self.image.dtype, chunks = (1, self.eff_subarrayv, self.eff_subarrayh)
-                                                      )
+        length = self.settings['num_frames']
+
+        self.image_h5 = [None]*self.settings['time_frames_n']
         
-        self.image_h5.dims[0].label = "z"
-        self.image_h5.dims[1].label = "y"
-        self.image_h5.dims[2].label = "x"
-        
-        #self.image_h5.attrs['element_size_um'] =  [self.settings['zsampling'], self.settings['ysampling'], self.settings['xsampling']]
-        self.image_h5.attrs['element_size_um'] =  [1,1,1] # required for compatibility with imageJ
-        
+        for time_index in range(self.settings['time_frames_n']):
+            
+            name = f't{time_index:04d}/c0000/image'
+            self.image_h5[time_index] = self.h5_group.create_dataset( name  = name, 
+                                                          shape = ( length, img_size[0], img_size[1]),
+                                                          dtype = self.image.dtype, chunks = (1, self.eff_subarrayv, self.eff_subarrayh)
+                                                          )
+            self.image_h5[time_index].dims[0].label = "z"
+            self.image_h5[time_index].dims[1].label = "y"
+            self.image_h5[time_index].dims[2].label = "x"
+            self.image_h5[time_index].attrs['element_size_um'] =  [1,1,1] # required for compatibility with imageJ
         
         
