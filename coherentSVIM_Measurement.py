@@ -155,7 +155,7 @@ class coherentSvimMeasurement(Measurement):
     
     def calculate_time_frames_n(self):
         
-        if not self.settings['time_laps']:
+        if not self.settings['time_lapse']:
             return int(1)
         else:
             # 0.3s is the trigger dead time we set, 0.24 is an empirical dead computational time
@@ -261,7 +261,7 @@ class coherentSvimMeasurement(Measurement):
         if hasattr(self, 'time_frames_n'):
             self.settings['time_frames_n'] = self.calculate_time_frames_n()
     
-    def set_time_laps(self, time_laps):
+    def set_time_lapse(self, time_lapse):
         if hasattr(self, 'time_frames_n'):
             self.settings['time_frames_n'] = self.calculate_time_frames_n()
         
@@ -311,7 +311,7 @@ class coherentSvimMeasurement(Measurement):
         self.settings.New('edge_trigger_margin', dtype = float, initial = self.calculate_margin(), vmin = 0.0, ro=True, spinbox_decimals = 3 , unit = 'ms')
         self.settings.New('effective_fps', dtype = float, initial = self.calculate_eff_fps(), vmin = 0.0, ro = True, spinbox_decimals = 2, unit = 'fps')
         self.settings.New('skip_upload', dtype=bool, initial=False )
-        self.time_laps = self.settings.New('time_laps', dtype = bool, initial = False)
+        self.time_lapse = self.settings.New('time_lapse', dtype = bool, initial = False)
         self.obs_time = self.settings.New('obs_time', dtype=float, initial= 0.0, vmin = 0, spinbox_decimals = 3, spinbox_step = 10.0,  unit = 's' )
         self.dark_time = self.settings.New('dark_time', dtype = float, initial = 0.0, vmin = 0, spinbox_decimals = 3, spinbox_step = 1, unit = 's')
         self.time_frames_n  = self.settings.New('time_frames_n', dtype = int, initial = 1, vmin = 1, ro = True)
@@ -323,7 +323,7 @@ class coherentSvimMeasurement(Measurement):
         self.PosNeg.hardware_set_func = self.set_PosNeg
         self.exposure.hardware_set_func = self.set_exposure
         self.ROI_s_z.hardware_set_func = self.set_ROI_s_z
-        self.time_laps.hardware_set_func = self.set_time_laps
+        self.time_lapse.hardware_set_func = self.set_time_lapse
         self.obs_time.hardware_set_func = self.set_obs_time
         self.dark_time.hardware_set_func = self.set_dark_time
         
@@ -428,7 +428,7 @@ class coherentSvimMeasurement(Measurement):
         # =============================================================================
         
         
-        if not self.settings['skip_upload'] or self.settings['time_laps']:
+        if not self.settings['skip_upload'] or self.settings['time_lapse']:
         
             print("\n****************\nLoading pattern\n****************\n")
             t_load_init = time.time()
@@ -493,13 +493,13 @@ class coherentSvimMeasurement(Measurement):
             
             print("\n****************\nLoad squared ends\n****************\n")
             
-        elif not self.settings['time_laps'] :
+        elif not self.settings['time_lapse'] :
             print('WARNING!\nNo images uploaded: the DMD uses the last uploaded sequence of patterns')
 
         
         self.initH5()
 
-        # for loop for time laps
+        # for loop for time lapse
     
         
         t_init = time.time()  # we record the initial time after the first upload
@@ -610,8 +610,8 @@ class coherentSvimMeasurement(Measurement):
             # exit conditions
             #=====================================
             
-            if not self.settings['time_laps']:
-                break # redundant since if setting time_laps is false time_framse_n = 1
+            if not self.settings['time_lapse']:
+                break # redundant since if setting time_lapse is false time_framse_n = 1
                 
             else:
                 time.sleep(self.settings['dark_time']) #seconds

@@ -49,28 +49,50 @@ def time_it(method):
 class coherentSVIM_analysis:
     
     name = 'coherentSVIM_analysis'
-    
 
-    def __init__(self, fname):
+    def __init__(self, fname, params_from_ui = {'base': 'cos',
+                                                'X0': 0,
+                                                'Y0': 0,
+                                                'delta_x' : 0,
+                                                'delta_y' : 0,
+                                                'mu': 0.01,
+                                                'lamda': 0.5,
+                                                'niter_out': 15,
+                                                'niter_in': 2,
+                                                'lsqr_niter': 5,
+                                                'lsqr_damp': 1e-4} ):
         
-        self.filename  = fname
+        self.file_path  = fname
+    
+        self.X0 = params_from_ui['X0']
+        self.Y0 = params_from_ui['Y0']
+        self.delta_x = params_from_ui['delta_x']
+        self.delta_y = params_from_ui['delta_y']
+        self.base = params_from_ui['base']
+        self.mu = params_from_ui['mu']
+        self.lamda = params_from_ui['lamda']
+        self.niter_out = params_from_ui['niter_out']
+        self.niter_in = params_from_ui['niter_in']
+        self.lsqr_niter = params_from_ui['lsqr_niter']
+        self.lsqr_damp = params_from_ui['lsqr_damp']
+        
         
     @time_it   
-    def load_h5_file(self):
+    def load_h5_file(self, dataset_index = 0):
         
-        self.imageRaw = get_h5_dataset(self.filename) 
+        self.imageRaw = get_h5_dataset(self.file_path, max(0,dataset_index)) 
         
         
             
     def show_im_raw(self):
-        pg.image(self.imageRaw, title="Raw image")        
-               
-        #keeps the window open running a QT application
-        if sys.flags.interactive != 1 or not hasattr(qtpy.QtCore, 'PYQT_VERSION'):
-            QApplication.exec_()
-                          
-   
-        sys.exit ( "End of test")
+        
+        pg.image(self.imageRaw, title="Raw image")    
+        
+        if self.name == 'coherentSVIM_analysis':
+            #keeps the window open running a QT application
+            if sys.flags.interactive != 1 or not hasattr(qtpy.QtCore, 'PYQT_VERSION'):
+                QApplication.exec_()
+            sys.exit ( "End of test")
         
     @time_it    
     def show_im_raw_cc(self):
@@ -97,24 +119,21 @@ class coherentSVIM_analysis:
         self.imageRaw = pos - neg
     
     @time_it
-    def setROI(self, x_min, y_min, ROIsize, ROIsize_y = None):
+    def setROI(self, X0 = None, Y0 = None, delta_x = None, delta_y = None):
         
-        '''
-        Defines the ROI size
-        If ROIsize_y is not provided the ROI becomes a square of side ROIsize
-        '''
+        if X0 is not None: self.X0 = X0
+        if Y0 is not None: self.Y0 = Y0
+        if delta_x is not None: self.delta_x = delta_x
+        if delta_y is not None: self.delta_y = delta_y
         
-        if ROIsize_y == None:
-            ROIsize_y = ROIsize
-        
-        self.imageRaw = self.imageRaw[:, x_min :x_min +ROIsize, y_min: y_min+ROIsize_y]
+        self.imageRaw = self.imageRaw[:, self.X0 : self.X0 + self.delta_x, self.Y0 : self.Y0 + self.delta_y]
     
     @time_it
     def choose_freq(self, N = None):
         
-        f_min = get_h5_attr(self.filename, 'f_min')[0]
-        f_max = get_h5_attr(self.filename, 'f_max')[0]
-        ROI_s_z = get_h5_attr(self.filename, 'ROI_s_z')[0]
+        f_min = get_h5_attr(self.file_path, 'f_min')[0]
+        f_max = get_h5_attr(self.file_path, 'f_max')[0]
+        ROI_s_z = get_h5_attr(self.file_path, 'ROI_s_z')[0]
         self.ROI_s_z = ROI_s_z
         
         freqs = np.linspace(f_min, f_max, int(2*(f_max - f_min) + 1),dtype = float)
@@ -130,8 +149,6 @@ class coherentSVIM_analysis:
                 period = int(ROI_s_z/freq)
                 disp_freqs.append(ROI_s_z/period)
                 
-        mask = np.append(np.diff(disp_freqs)!= 0, True)
-        
         
         self.imageRaw = self.imageRaw[0:N, :, :]
         self.disp_freqs = disp_freqs[0:N]
@@ -144,24 +161,24 @@ class coherentSVIM_analysis:
         self.disp_freqs = np.array(disp_freqs)[mask]
     
     @time_it    
-    def invert(self, base = 'sq'):
+    def invert(self, base = None):
         
-        self.base = base
+        if base is not None: self.base = base
         
         self.transform = t_6090.dct_6090(self.disp_freqs)
         self.transform.create_space()
         
-        if base == 'cos':
+        if self.base == 'cos':
             self.transform.create_matrix_cos()
             self.transform.compute_inverse()
             self.image_inv = np.tensordot(self.transform.inv_matrix ,  self.imageRaw , axes=([1],[0]))
             
-        elif base == 'sq':
+        elif self.base == 'sq':
             self.transform.create_matrix_sq()
             self.transform.compute_inverse()
             self.image_inv = np.tensordot(self.transform.inv_matrix ,  self.imageRaw , axes=([1],[0]))
             
-        elif base == 'sp_dct':
+        elif self.base == 'sp_dct':
             dct_coeff = self.imageRaw
             dct_coeff[0,:,:] *= 1/np.sqrt(2)  # I rescale the cw illumination >> It just shifts the inverted image towards more negative values
             self.image_inv = sp_fft.idct(dct_coeff, type = 2, axis = 0, norm = 'ortho')
@@ -170,23 +187,23 @@ class coherentSVIM_analysis:
         self.clipped = False
     
     @time_it        
-    def p_invert(self, base = 'sq'):
+    def p_invert(self,  base = None):
         
         '''
         Inverts the raw image using the the matrix pseudoinverse with rcond = 10
         '''
         
-        self.base = base
+        if base is not None: self.base = base
         
         self.transform = t_6090.dct_6090(self.disp_freqs)
         self.transform.create_space()
         
-        if base == 'cos':
+        if self.base == 'cos':
             self.transform.create_matrix_cos()
             self.transform.compute_pinv()
             self.image_inv = np.tensordot(self.transform.pinv_matrix ,  self.imageRaw , axes=([1],[0]))
             
-        elif base == 'sq':
+        elif self.base == 'sq':
             self.transform.create_matrix_sq()
             self.transform.compute_pinv()
             self.image_inv = np.tensordot(self.transform.pinv_matrix ,  self.imageRaw , axes=([1],[0]))
@@ -430,7 +447,7 @@ class coherentSVIM_analysis:
         print(f'time for one line: {(time.time()  - t)/(shape[1] * shape[2])}')
         
         
-        self.image_inv = dataset.image_inv.reshape(Nz,ny,nx)
+        self.image_inv = self.image_inv.reshape(Nz,ny,nx)
         # self.image_inv = self.image_inv.transpose(0,2,1)
         
         self.denoised = True
@@ -457,13 +474,12 @@ class coherentSVIM_analysis:
         # TODO make  the aspect ratio of the displayedimage match the sampled volume aspect ratio
         
         pg.image(self.image_inv, title= f"Inverted image (base: {self.base})")        
-               
-        #keeps the window open running a QT application
-        if sys.flags.interactive != 1 or not hasattr(qtpy.QtCore, 'PYQT_VERSION'):
-            QApplication.exec_()
-                          
-   
-        sys.exit ( "End of test")
+        
+        if self.name == 'coherentSVIM_analysis':
+            #keeps the window open running a QT application
+            if sys.flags.interactive != 1 or not hasattr(qtpy.QtCore, 'PYQT_VERSION'):
+                QApplication.exec_()
+            sys.exit ( "End of test")
     
     @time_it
     def show_inverted_proj(self):
@@ -583,7 +599,7 @@ if __name__ == "__main__" :
         
         
         # ------ with diffurer
-        # file_name = '/Users/marcovitali/Documents/Poli/tesi/ScopeFoundy/coherentSVIM/data/220509_gfp_plant/220509_163108_coherent_SVIM_plant1_elongation_diffuser.h5'
+        file_name = '/Users/marcovitali/Documents/Poli/tesi/ScopeFoundy/coherentSVIM/data/220509_gfp_plant/220509_163108_coherent_SVIM_plant1_elongation_diffuser.h5'
         # ------ Diffuser off
         # file_name = '/Users/marcovitali/Documents/Poli/tesi/ScopeFoundy/coherentSVIM/data/220509_gfp_plant/220509_163256_coherent_SVIM_plant1_elongation_diffuser_stoppeed.h5'
         # ------ No diffuser
@@ -604,7 +620,7 @@ if __name__ == "__main__" :
         
         # ------ different exposure times
         # file_name = "D:\\data\\coherent_svim\\220509_gfp_plant\\220509_153249_coherent_SVIM_plant1_tip_200ms.h5"
-        file_name = "D:\\data\\coherent_svim\\220509_gfp_plant\\220509_153510_coherent_SVIM_plant1_tip_800ms.h5"
+        # file_name = "D:\\data\\coherent_svim\\220509_gfp_plant\\220509_153510_coherent_SVIM_plant1_tip_800ms.h5"
         
         
         # (220511) H2O2 stimulus
@@ -632,7 +648,7 @@ if __name__ == "__main__" :
         # dataset.setROI(396, 469 , 201, 50)
         # dataset.setROI(196, 469 , 201)
         # dataset.setROI(200, 0 , 600, 1024)
-        # dataset.show_im_raw()
+        dataset.show_im_raw()
         
         dataset.choose_freq() # also removes any duplicate in frequency
         
