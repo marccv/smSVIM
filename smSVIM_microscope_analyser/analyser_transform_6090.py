@@ -24,6 +24,8 @@ import pylops
 from scipy.sparse.linalg import LinearOperator
 
 import sys
+import os
+import h5py
 import pyqtgraph as pg
 import qtpy.QtCore
 from qtpy.QtWidgets import QApplication
@@ -50,40 +52,34 @@ class coherentSVIM_analysis:
     
     name = 'coherentSVIM_analysis'
 
-    def __init__(self, fname, params_from_ui = {'base': 'cos',
-                                                'X0': 0,
-                                                'Y0': 0,
-                                                'delta_x' : 0,
-                                                'delta_y' : 0,
-                                                'mu': 0.01,
-                                                'lamda': 0.5,
-                                                'niter_out': 15,
-                                                'niter_in': 2,
-                                                'lsqr_niter': 5,
-                                                'lsqr_damp': 1e-4} ):
+    def __init__(self, fname, params = None ):
+        
+        if params is None:
+            self.params = {'base': 'cos',
+                           'select_ROI': False,
+                           'denoise' : False,
+                           'X0': 0,
+                           'Y0': 0,
+                           'delta_x' : 0,
+                           'delta_y' : 0,
+                           'mu': 0.01,
+                           'lamda': 0.5,
+                           'niter_out': 15,
+                           'niter_in': 2,
+                           'lsqr_niter': 5,
+                           'lsqr_damp': 1e-4}
+        else:
+            self.params = params
         
         self.file_path  = fname
-    
-        self.X0 = params_from_ui['X0']
-        self.Y0 = params_from_ui['Y0']
-        self.delta_x = params_from_ui['delta_x']
-        self.delta_y = params_from_ui['delta_y']
-        self.base = params_from_ui['base']
-        self.mu = params_from_ui['mu']
-        self.lamda = params_from_ui['lamda']
-        self.niter_out = params_from_ui['niter_out']
-        self.niter_in = params_from_ui['niter_in']
-        self.lsqr_niter = params_from_ui['lsqr_niter']
-        self.lsqr_damp = params_from_ui['lsqr_damp']
         
         
     @time_it   
     def load_h5_file(self, dataset_index = 0):
         
         self.imageRaw = get_h5_dataset(self.file_path, max(0,dataset_index)) 
-        
-        
-            
+
+    
     def show_im_raw(self):
         
         pg.image(self.imageRaw, title="Raw image")    
@@ -93,8 +89,9 @@ class coherentSVIM_analysis:
             if sys.flags.interactive != 1 or not hasattr(qtpy.QtCore, 'PYQT_VERSION'):
                 QApplication.exec_()
             sys.exit ( "End of test")
-        
-    @time_it    
+
+
+    @time_it
     def show_im_raw_cc(self):
         
         fig1=plt.figure()
@@ -119,14 +116,15 @@ class coherentSVIM_analysis:
         self.imageRaw = pos - neg
     
     @time_it
-    def setROI(self, X0 = None, Y0 = None, delta_x = None, delta_y = None):
+    def setROI(self, **kwargs):
         
-        if X0 is not None: self.X0 = X0
-        if Y0 is not None: self.Y0 = Y0
-        if delta_x is not None: self.delta_x = delta_x
-        if delta_y is not None: self.delta_y = delta_y
+        # update any specified parameter
+        for key, val in kwargs.items():
+            self.params[key] = val
         
-        self.imageRaw = self.imageRaw[:, self.X0 : self.X0 + self.delta_x, self.Y0 : self.Y0 + self.delta_y]
+        self.imageRaw = self.imageRaw[:,
+                                      self.params['X0'] : self.params['X0'] + self.params['delta_x'],
+                                      self.params['Y0'] : self.params['Y0'] + self.params['delta_y']]
     
     @time_it
     def choose_freq(self, N = None):
@@ -161,24 +159,26 @@ class coherentSVIM_analysis:
         self.disp_freqs = np.array(disp_freqs)[mask]
     
     @time_it    
-    def invert(self, base = None):
+    def invert(self, **kwargs):
         
-        if base is not None: self.base = base
+        # update any specified parameter
+        for key, val in kwargs.items():
+            self.params[key] = val
         
         self.transform = t_6090.dct_6090(self.disp_freqs)
         self.transform.create_space()
         
-        if self.base == 'cos':
+        if self.params['base'] == 'cos':
             self.transform.create_matrix_cos()
             self.transform.compute_inverse()
             self.image_inv = np.tensordot(self.transform.inv_matrix ,  self.imageRaw , axes=([1],[0]))
             
-        elif self.base == 'sq':
+        elif self.params['base'] == 'sq':
             self.transform.create_matrix_sq()
             self.transform.compute_inverse()
             self.image_inv = np.tensordot(self.transform.inv_matrix ,  self.imageRaw , axes=([1],[0]))
             
-        elif self.base == 'sp_dct':
+        elif self.params['base'] == 'sp_dct':
             dct_coeff = self.imageRaw
             dct_coeff[0,:,:] *= 1/np.sqrt(2)  # I rescale the cw illumination >> It just shifts the inverted image towards more negative values
             self.image_inv = sp_fft.idct(dct_coeff, type = 2, axis = 0, norm = 'ortho')
@@ -187,30 +187,30 @@ class coherentSVIM_analysis:
         self.clipped = False
     
     @time_it        
-    def p_invert(self,  base = None):
+    def p_invert(self,  **kwargs):
         
         '''
         Inverts the raw image using the the matrix pseudoinverse with rcond = 10
         '''
-        
-        if base is not None: self.base = base
+        # update any specified parameter
+        for key, val in kwargs.items():
+            self.params[key] = val
         
         self.transform = t_6090.dct_6090(self.disp_freqs)
         self.transform.create_space()
         
-        if self.base == 'cos':
+        if self.params['base'] == 'cos':
             self.transform.create_matrix_cos()
             self.transform.compute_pinv()
             self.image_inv = np.tensordot(self.transform.pinv_matrix ,  self.imageRaw , axes=([1],[0]))
             
-        elif self.base == 'sq':
+        elif self.params['base'] == 'sq':
             self.transform.create_matrix_sq()
             self.transform.compute_pinv()
             self.image_inv = np.tensordot(self.transform.pinv_matrix ,  self.imageRaw , axes=([1],[0]))
         
         self.denoised = False
         self.clipped = False
-        self.param = None
     
     
     @time_it
@@ -219,108 +219,34 @@ class coherentSVIM_analysis:
         shape = self.image_inv.shape
         self.param = 'Chambolle 1D denoise on already inverted image with linear weigth'
         
-        if self.base == 'cos':
+        if self.params['base'] == 'cos':
             ratio = 0.1193
-        elif self.base == 'sq':
+        elif self.params['base'] == 'sq':
             ratio = 0.20439
         
         for i in range(shape[1]):
             for j in range(shape[2]):
                 
                 weight = max(self.image_inv[:,i,j]) * ratio
-                self.image_inv[:,i,j] = denoise_tv_chambolle(self.image_inv[:,i,j], weight)
+                # self.image_inv[:,i,j] = denoise_tv_chambolle(self.image_inv[:,i,j], weight)
         
         self.denoised = True
     
     
-    
-    
-    
-    
-        
-        
-        
-        
-        
-        
-        
-        
     @time_it
-    def invert_and_denoise1D(self, base = 'sq', mu = 0.01, lamda = 0.3, niter_out = 50, niter_in = 3):
+    def invert_and_denoise1D_no_for(self, **kwargs):
         
-        self.base = base
+        # update any specified parameter
+        for key, val in kwargs.items():
+            self.params[key] = val
         
         self.transform = t_6090.dct_6090(self.disp_freqs)
         self.transform.create_space()
     
-        if base == 'cos':
+        if self.params['base'] == 'cos':
             self.transform.create_matrix_cos()
             
-        elif base == 'sq':
-            self.transform.create_matrix_sq()
-        
-        M = self.transform.matrix
-        M = M.astype(float)
-        # M = aslinearoperator(M.astype(float)) #scipy lin op
-        # M = pylops.LinearOperator(M) # Pylops overload. They actually say that the end user should not use it
-        
-        nz = len(self.disp_freqs)
-        
-        Dop = pylops.FirstDerivative(nz, edge=True, kind="backward")
-        
-        # mu = 0.01
-        # lamda = 0.3
-        # niter_out = 50
-        # niter_in = 3
-        self.param = {'denoise': '1D', 'mu' : mu, 'lambda': lamda, 'niter_out': niter_out , 'niter_in': niter_in}
-        print(self.param)
-        
-        shape = self.imageRaw.shape
-        print(shape)
-        self.image_inv = np.zeros(shape)
-        t = time.time()
-        for i in range(shape[1]):
-            for j in range(shape[2]):
-                # print(i,j)
-                self.image_inv[:,i,j], _ = pylops.optimization.sparsity.SplitBregman(
-                                            M,
-                                            [Dop],
-                                            self.imageRaw[:,i,j],
-                                            niter_out,
-                                            niter_in,
-                                            mu=mu,
-                                            epsRL1s=[lamda],
-                                            tol=1e-4,
-                                            tau=1.0,
-                                            **dict(iter_lim=30, damp=1e-10)
-                                        )
-        print(f'time for one line: {(time.time()  - t)/(shape[1] * shape[2])}')
-        
-        self.denoised = True
-        self.clipped = False
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    @time_it
-    def invert_and_denoise1D_no_for(self, base = 'sq', mu = 0.01, lamda = 0.3, niter_out = 50, niter_in = 3, lsqr_niter = 5, lsqr_damp = 1e-4):
-        
-        self.base = base
-        
-        self.transform = t_6090.dct_6090(self.disp_freqs)
-        self.transform.create_space()
-    
-        if base == 'cos':
-            self.transform.create_matrix_cos()
-            
-        elif base == 'sq':
+        elif self.params['base'] == 'sq':
             self.transform.create_matrix_sq()
         
         nz,ny,nx = self.imageRaw.shape
@@ -343,27 +269,22 @@ class coherentSVIM_analysis:
         
         Dop = pylops.FirstDerivative(Nz*ny*nx, (Nz, ny, nx),  0, edge=True, kind="backward")
         
-        # mu = 0.01
-        # lamda = 0.3
-        # niter_out = 50
-        # niter_in = 3
-        self.param = {'denoise': '1D', 'mu' : mu, 'lambda z': lamda, 'niter_out': niter_out , 'niter_in': niter_in, 'lsqr_niter' : lsqr_niter, 'lsqr_damp' : lsqr_damp}
-        print(self.param)
+        self.params['denoise_type': '1D']
         print(shape)
-        # self.image_inv = np.zeros(shape)
+        
         t = time.time()
         
         self.image_inv, _ = pylops.optimization.sparsity.SplitBregman(
                                     Op_s,
                                     [Dop],
                                     self.imageRaw.ravel(),
-                                    niter_out,
-                                    niter_in,
-                                    mu=mu,
-                                    epsRL1s=[lamda],
+                                    self.params['niter_out'],
+                                    self.params['niter_in'],
+                                    mu = self.params['mu'],
+                                    epsRL1s=[self.params['lamda']],
                                     tol=1e-4,
                                     tau=1.0,
-                                    **dict(iter_lim=lsqr_niter, damp=lsqr_damp)
+                                    **dict(iter_lim=self.params['lsqr_niter'], damp=self.params['lsqr_damp'])
                                 )
         print(f'time for one line: {(time.time()  - t)/(shape[1] * shape[2])}')
         
@@ -371,29 +292,23 @@ class coherentSVIM_analysis:
         self.image_inv = dataset.image_inv.reshape(Nz,ny,nx)
         self.image_inv = self.image_inv.transpose(0,2,1)
         
-        self.denoised = True
         self.clipped = False
         
     
-
-    
-    
-    
-    
-    
-    
     @time_it
-    def invert_and_denoise3D_v2(self, base = 'sq', mu = 0.01, lamda = [20,20,20], niter_out = 50, niter_in = 3, lsqr_niter = 5, lsqr_damp = 1e-4):
+    def invert_and_denoise3D_v2(self, **kwargs):
         
-        self.base = base
+        # update any specified parameter
+        for key, val in kwargs.items():
+            self.params[key] = val
         
         self.transform = t_6090.dct_6090(self.disp_freqs)
         self.transform.create_space()
     
-        if base == 'cos':
+        if self.params['base'] == 'cos':
             self.transform.create_matrix_cos()
             
-        elif base == 'sq':
+        elif self.params['base'] == 'sq':
             self.transform.create_matrix_sq()
         
         nz,ny,nx = self.imageRaw.shape
@@ -422,27 +337,21 @@ class coherentSVIM_analysis:
             pylops.FirstDerivative(Nz*ny*nx, (Nz, ny, nx),  2, edge=True, kind="backward")
         ]
         
-        # mu = 0.01
-        # lamda = [lamda]*3
-        # niter_out = 50
-        # niter_in = 3
-        self.param = {'denoise': '3D', 'mu' : mu, 'lambda z,y,x': lamda, 'niter_out': niter_out , 'niter_in': niter_in, 'lsqr_niter' : lsqr_niter, 'lsqr_damp' : lsqr_damp}
-        print(self.param)
         print(shape)
-        # self.image_inv = np.zeros(shape)
+        
         t = time.time()
         
         self.image_inv, _ = pylops.optimization.sparsity.SplitBregman(
                                     Op_s,
                                     Dop,
                                     self.imageRaw.ravel(),
-                                    niter_out,
-                                    niter_in,
-                                    mu=mu,
-                                    epsRL1s = lamda,
+                                    self.params['niter_out'],
+                                    self.params['niter_in'],
+                                    mu = self.params['mu'],
+                                    epsRL1s = [self.params['lamda']]*3,
                                     tol=1e-4,
                                     tau=1.0,
-                                    **dict(iter_lim=lsqr_niter, damp=lsqr_damp)
+                                    **dict(iter_lim=self.params['lsqr_niter'], damp=self.params['lsqr_damp'])
                                 )
         print(f'time for one line: {(time.time()  - t)/(shape[1] * shape[2])}')
         
@@ -450,16 +359,10 @@ class coherentSVIM_analysis:
         self.image_inv = self.image_inv.reshape(Nz,ny,nx)
         # self.image_inv = self.image_inv.transpose(0,2,1)
         
-        self.denoised = True
+        self.params['denoise_type': '1D']
         self.clipped = False
     
-    
-    
-    
-    
-    
-    
-    
+
     
     
     
@@ -473,7 +376,7 @@ class coherentSVIM_analysis:
         
         # TODO make  the aspect ratio of the displayedimage match the sampled volume aspect ratio
         
-        pg.image(self.image_inv, title= f"Inverted image (base: {self.base})")        
+        pg.image(self.image_inv, title= f"Inverted image (base: {self.params['base']})")        
         
         if self.name == 'coherentSVIM_analysis':
             #keeps the window open running a QT application
@@ -493,7 +396,7 @@ class coherentSVIM_analysis:
         
         fig1, (ax1, ax2) =plt.subplots(2, 1, gridspec_kw={'height_ratios': [ 4, 1]})
         # fig1.clf()
-        fig1.text(0.1,0.2, f'Inverted image projections, base: {self.base}\n{self.param}')
+        fig1.text(0.1,0.2, f'Inverted image projections\n{self.params}')
         
         xy = ax1.imshow(inverted_xy.transpose(), cmap = 'gray', aspect = 1, vmin = c_min, vmax = c_max)
         ax1.set_xlabel('x (px)')
@@ -516,7 +419,7 @@ class coherentSVIM_analysis:
         
         fig1=plt.figure()
         fig1.clf()
-        fig1.suptitle(f'Inverted image XY projection, base: {self.base}\n{self.param}')
+        fig1.suptitle(f'Inverted image XY projection\n{self.params}')
         ax1=fig1.add_subplot(111)
         xy = ax1.imshow(inverted_xy.transpose(), cmap = 'gray', aspect = 1)
         ax1.set_xlabel('x (px)')
@@ -525,7 +428,11 @@ class coherentSVIM_analysis:
         cbar.ax.set_ylabel('Counts', rotation=270)
     
     @time_it
-    def show_inverted_xz(self, plane = 'sum'):
+    def show_inverted_xz(self, plane = 'sum', **kwargs):
+        
+        # if kwargs is not None:
+        #     for key, value in kwargs.items():
+        #         print( key, '==>', value)
         
         if plane == 'sum':
             inverted_xz = np.sum(self.image_inv, 2)
@@ -538,11 +445,22 @@ class coherentSVIM_analysis:
         # aspect_xz = 0.5
         
         # fig1=plt.figure( figsize = (3, 6) , constrained_layout=True) 
-        fig1=plt.figure( constrained_layout=False) 
-        fig1.clf()
+        if __name__ == 'coherentSVIM_analysis':
         
-        ax1=fig1.add_subplot(111)
-        fig1.suptitle(f'Inverted image XZ projection, base: {self.base}\n{self.param}')
+            fig1=plt.figure( constrained_layout=False) 
+            fig1.clf()
+            ax1=fig1.add_subplot(111)
+            
+        else:
+            
+            fig1 = kwargs.get('fig')
+            ax1 = kwargs.get('ax')
+            
+            # print(fig1 is None)
+            # print(ax1 is None)
+        
+        
+        fig1.suptitle(f'Inverted image XZ projection\n{self.params}')
         
         xz = ax1.imshow(inverted_xz, cmap = 'gray', aspect = aspect_xz, interpolation = 'none') #aspect = 12.82 for 24 z pixels, aspect = 6.6558 for 61 z pixels, aspect = 11.80 for tests in 61px, aspect = 30 for testing in 24 px
         ax1.set_xlabel('x (px)')
@@ -550,38 +468,51 @@ class coherentSVIM_analysis:
         cbar = fig1.colorbar(xz, ax = ax1, shrink=1, format='%.0e')
         cbar.ax.set_ylabel('Counts', rotation=270)
     
+
+    # @time_it
+    def save_inverted(self):
         
-    def show_inverted3D(self):
-        
-        # TODO: make work
-        
-        from pyqtgraph.Qt import QtCore, QtGui
-        import pyqtgraph.opengl as gl
-        
-        # create qtgui
-        app = QtGui.QApplication([])
-        w = gl.GLViewWidget()
-        w.orbit(256, 256)
-        w.setCameraPosition(0, 0, 0)
-        w.opts['distance'] = 200
-        w.show()
-        w.setWindowTitle('pyqtgraph example: GLVolumeItem')
-        
-        g = gl.GLGridItem()
-        g.scale(20, 20, 1)
-        w.addItem(g)
-        
-        
-        v = gl.GLVolumeItem(self.image_inv, sliceDensity=1, smooth=False, glOptions='translucent')
-        v.translate(-self.image_inv.shape[0]/2, -self.image_inv.shape[1]/2, -150)
-        w.addItem(v)
-        
-        if (sys.flags.interactive != 1) or not hasattr(QtCore, 'PYQT_VERSION'):
-            QtGui.QApplication.instance().exec_()
+        try:
+            head, tail = os.path.split(self.file_path)
             
-    def save_inverted(self, outputFile):
+            newpath = self.file_path[:-3] + '_ANALYSED'
+            if not os.path.exists(newpath):
+                os.makedirs(newpath)
+            
+            index_key = 'single_volume_time_index'
+            label_key = 'save_label'
+            
+            if len(self.params[label_key]) >0:
+                fname = os.path.join(newpath, f'volume_{self.params[index_key]}_inverted_{self.params[label_key]}.h5')
+            else:
+                fname = os.path.join(newpath, f'volume_{self.params[index_key]}_inverted.h5')
+            
+            while os.path.exists(fname):
+                fname = fname[:-3] + '_bis.h5'
+            
+            parent = h5py.File(fname,'w')
+    
+            # create groups
+            analysis_parameters = parent.create_group('analysis_parameters') 
+            
+            for key, val in self.params.items():
+                analysis_parameters.attrs[key] = val
+     
+            # create a dataset
+            name = 't000/c000/' + tail[:-3]
+            h5dataset = parent.create_dataset(name = name, shape=self.image_inv.shape, data = self.image_inv)
+            h5dataset.dims[0].label = "z"
+            h5dataset.dims[1].label = "y"
+            h5dataset.dims[2].label = "x"
+            
+            dmdPx_to_sample_ratio = 1.247 # (um/px)
+            z_sample_period = self.ROI_s_z * dmdPx_to_sample_ratio / self.image_inv.shape[0] 
+            h5dataset.attrs['element_size_um'] =  [z_sample_period,0.65,0.65]
+
+
+        finally:
+            parent.close()
         
-        tiff.imsave(outputFile , np.uint16(self.image_inv.clip(min = 0)), append = False) 
         
 #%%    
  
@@ -656,16 +587,18 @@ if __name__ == "__main__" :
         
         base = 'cos'
         mu = 0.01
-        lamda = [0.5]*3
+        lamda = 0.5
         niter_out = 15
         niter_in = 2
         lsqr_niter = 5
         lsqr_damp = 1e-4
         
-        dataset.p_invert(base)
+        dataset.p_invert(base = base)
         
-        # dataset.invert_and_denoise1D_no_for(base, mu, lamda[0], niter_out, niter_in, lsqr_niter, lsqr_damp)
-        # dataset.invert_and_denoise3D_v2(base, mu, lamda, niter_out, niter_in, lsqr_niter, lsqr_damp)
+        # dataset.invert_and_denoise1D_no_for(base = base, lamda = lamda, niter_out = niter_out,
+                                # niter_in = niter_in, lsqr_niter = lsqr_niter, lsqr_damp = lsqr_damp)
+        # invert_and_denoise3D_v2(base = base, lamda = lamda, niter_out = niter_out,
+                                # niter_in = niter_in, lsqr_niter = lsqr_niter, lsqr_damp = lsqr_damp)
         
         # dataset.show_inverted()
         
@@ -676,7 +609,7 @@ if __name__ == "__main__" :
         
 
         fig, ax = plt.subplots()
-        ax.plot(dataset.image_inv[:,20,20],'x-', label = f'{dataset.param}')
+        ax.plot(dataset.image_inv[:,20,20],'x-', label = f'{dataset.params}')
         ax.legend()
         
         
@@ -692,7 +625,6 @@ if __name__ == "__main__" :
             
             
         # dataset.save_inverted(save_file)
-        import h5py
         
         try:
         
