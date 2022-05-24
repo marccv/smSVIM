@@ -67,7 +67,11 @@ class coherentSVIM_analysis:
                            'niter_out': 15,
                            'niter_in': 2,
                            'lsqr_niter': 5,
-                           'lsqr_damp': 1e-4}
+                           'lsqr_damp': 1e-4,
+                           'single_volume_time_index' : 0,
+                           'save_label': '',
+                           'save_label_time_lapse': '',
+                           'time_lapse_mode': 'sum'}
         else:
             self.params = params
         
@@ -512,6 +516,95 @@ class coherentSVIM_analysis:
 
         finally:
             parent.close()
+            
+            
+    def invert_time_lapse(self, **kwargs):
+        
+        # update any specified parameter
+        for key, val in kwargs.items():
+            self.params[key] = val
+        
+        if kwargs.get('progress_bar') is not None:
+            progress_bar = kwargs.get('progress_bar')
+            progress_bar.setValue(0)
+            
+        self.params['time_frames_n'] = get_h5_attr(self.file_path, 'time_frames_n')[0]
+        
+        self.tl_stack = []
+        
+        for time_index in range(self.params['time_frames_n']):
+            
+            self.load_h5_file(time_index)
+            
+            if self.select_ROI: self.setROI()
+            
+            self.merge_pos_neg()
+            self.choose_freq() # also removes any duplicate in frequency
+                        
+            self.p_invert()
+            
+            if self.params['time_lapse_mode'] == 'sum':
+                self.tl_stack.append(np.sum(self.image_inv, self.params['time_lapse_view'])) # view z = 0, y = 1, x = 2
+            elif self.params['time_lapse_view'] == 0:
+                self.tl_stack.append(self.image_inv[self.params['time_lapse_plane'],:,:])
+            elif self.params['time_lapse_view'] == 1:
+                self.tl_stack.append(self.image_inv[:, self.params['time_lapse_plane'],:])
+            elif self.params['time_lapse_view'] == 2:
+                self.tl_stack.append(self.image_inv[:,:,self.params['time_lapse_plane']])
+        
+        self.tl_stack = np.array(self.tl_stack)
+        
+    def show_time_lapse(self):
+            
+        pg.image(self.tl_stack, title= f"Inverted Time Lapse (base: {self.params['base']})")        
+        
+        if self.name == 'coherentSVIM_analysis':
+            #keeps the window open running a QT application
+            if sys.flags.interactive != 1 or not hasattr(qtpy.QtCore, 'PYQT_VERSION'):
+                QApplication.exec_()
+            sys.exit ( "End of test")
+    
+    def save_time_lapse(self):
+        
+        try:
+            head, tail = os.path.split(self.file_path)
+            
+            newpath = self.file_path[:-3] + '_ANALYSED'
+            if not os.path.exists(newpath):
+                os.makedirs(newpath)
+            
+            mode_key = 'time_lapse_mode'
+            
+            label_key = 'time_lapse_save_label'
+            
+            if len(self.params[label_key]) >0:
+                fname = os.path.join(newpath, f'time_lapse_inverted_{self.params[mode_key]}_{self.params[label_key]}.h5')
+            else:
+                fname = os.path.join(newpath, f'time_lapse_inverted_{self.params[mode_key]}.h5')
+            
+            while os.path.exists(fname):
+                fname = fname[:-3] + '_bis.h5'
+            
+            parent = h5py.File(fname,'w')
+    
+            # create groups
+            analysis_parameters = parent.create_group('analysis_parameters') 
+            
+            for key, val in self.params.items():
+                analysis_parameters.attrs[key] = val
+     
+            # create a dataset
+            name = 't000/c000/' + tail[:-3]
+            h5dataset = parent.create_dataset(name = name, shape=self.image_inv.shape, data = self.image_inv)
+            h5dataset.dims[0].label = "t"
+            h5dataset.dims[1].label = "y"
+            h5dataset.dims[2].label = "x"
+            
+            h5dataset.attrs['element_size_um'] =  [1,0.65,0.65]
+        
+        finally:
+            parent.close()
+
         
         
 #%%    
@@ -519,69 +612,26 @@ class coherentSVIM_analysis:
 if __name__ == "__main__" :
     
 
-        #   ----  1 ----- 
-        # file_name = '/Users/marcovitali/Documents/Poli/tesi/ScopeFoundy/coherentSVIM/data/data_28_4_22/220428_124841_coherent_SVIM_phantom2_good.h5'
-        #   ----  2 ----- 
-        # file_name = '/Users/marcovitali/Documents/Poli/tesi/ScopeFoundy/coherentSVIM/data/data_28_4_22/220428_124222_coherent_SVIM_phantom2_good.h5'
-        #   ----  3 ----- 
-        # file_name = '/Users/marcovitali/Documents/Poli/tesi/ScopeFoundy/coherentSVIM/data/data_28_4_22/220428_125643_coherent_SVIM_phantom2_good.h5'
-        #   ----  4 ----- 1
-        # file_name = '/Users/marcovitali/Documents/Poli/tesi/ScopeFoundy/coherentSVIM/data/data_28_4_22/220428_115143_coherent_SVIM_phantom2_good.h5'
+        # file_name = '/Users/marcovitali/Documents/Poli/tesi/ScopeFoundy/coherentSVIM/data/220523_cuma_fluo_test/220523_111748_DMD_light_sheet_diff_300ul_transp_6px_posneg.h5'
+        # file_name = '/Users/marcovitali/Documents/Poli/tesi/ScopeFoundy/coherentSVIM/data/220523_cuma_fluo_test/220523_113501_DMD_light_sheet_no_diff_300ul_transp_6px_posneg.h5'
         
+        # file_name = '/Users/marcovitali/Documents/Poli/tesi/ScopeFoundy/coherentSVIM/data/220523_cuma_fluo_test/220523_110615_coherent_SVIM_diff_300ul_transp.h5'
+        file_name = '/Users/marcovitali/Documents/Poli/tesi/ScopeFoundy/coherentSVIM/data/220523_cuma_fluo_test/220523_113202_coherent_SVIM_no_diff_300ul_transp.h5'
         
-        # ------ with diffurer
-        file_name = '/Users/marcovitali/Documents/Poli/tesi/ScopeFoundy/coherentSVIM/data/220509_gfp_plant/220509_163108_coherent_SVIM_plant1_elongation_diffuser.h5'
-        # ------ Diffuser off
-        # file_name = '/Users/marcovitali/Documents/Poli/tesi/ScopeFoundy/coherentSVIM/data/220509_gfp_plant/220509_163256_coherent_SVIM_plant1_elongation_diffuser_stoppeed.h5'
-        # ------ No diffuser
-        # file_name = '/Users/marcovitali/Documents/Poli/tesi/ScopeFoundy/coherentSVIM/data/220509_gfp_plant/220509_163441_coherent_SVIM_plant1_elongation_no_diffuser.h5'
-        # ------ Camaleon
-        # file_name = '/Users/marcovitali/Documents/Poli/tesi/ScopeFoundy/coherentSVIM/data/220509_gfp_plant/220509_172152_coherent_SVIM_plant2.h5'
-        
-        
-        # ------ plant in the center, left and right?, no diffuser
-        # file_name = "D:\\data\\coherent_svim\\220509_gfp_plant\\220509_150543_coherent_SVIM_plant1.h5"
-        # file_name = "D:\\data\\coherent_svim\\220509_gfp_plant\\220509_150951_coherent_SVIM_plant1.h5"
-        # file_name = "D:\\data\\coherent_svim\\220509_gfp_plant\\220509_151407_coherent_SVIM_plant1.h5"
-        
-        # ------ transposed pattern, there was the problem that the frequencies were a bit unclear and there was a divide by zero traceback
-        # file_name = "D:\\data\\coherent_svim\\220509_gfp_plant\\220509_151641_coherent_SVIM_plant1_transp.h5"
-        # file_name = "D:\\data\\coherent_svim\\220509_gfp_plant\\220509_151812_coherent_SVIM_plant1_transp.h5"
-        # file_name = "D:\\data\\coherent_svim\\220509_gfp_plant\\220509_152405_coherent_SVIM_plant1_transp_20pz_z.h5"
-        
-        # ------ different exposure times
-        # file_name = "D:\\data\\coherent_svim\\220509_gfp_plant\\220509_153249_coherent_SVIM_plant1_tip_200ms.h5"
-        # file_name = "D:\\data\\coherent_svim\\220509_gfp_plant\\220509_153510_coherent_SVIM_plant1_tip_800ms.h5"
-        
-        
-        # (220511) H2O2 stimulus
-        
-        # file_name = '/Users/marcovitali/Documents/Poli/tesi/ScopeFoundy/coherentSVIM/data/220510_gfp_plant/renamed/pog_h2o2_1.h5'
-        # file_name = "D:\\data\\coherent_svim\\220511_camaleon_plant\\220511_114841_coherent_SVIM_cy36_atp_second_round_ (7).h5"
-        # file_name = "D:\\data\coherent_svim\\220511_camaleon_plant\\220511_131028_coherent_SVIM_cy36_atp_third_round.h5"
-        # file_name = "D:\\data\coherent_svim\\220511_gfp_plant\\220511_145138_coherent_SVIM_ (90).h5"
-        # file_name = "D:\\data\\coherent_svim\\220511_gfp_plant\\220511_155605_coherent_SVIM_rog_h2o2_second_round_ (54).h5"
-        # file_name = "D:\\data\\coherent_svim\\220511_gfp_plant\\220511_173125_coherent_SVIM_rog_h2o2_leaf_ (1).h5"
-        
-        
-        # file_name_h5 = file_name + '.h5'
         
         dataset = coherentSVIM_analysis(file_name)
         dataset.load_h5_file()
         
         
         dataset.merge_pos_neg()
-        # dataset.setROI(814-20,  1132-20, 40) # one bead in dataset 4
-        # dataset.setROI(420,  524, 1000)
-        # dataset.setROI(1839-110, 879-110 , 220) # three beads in dataset 1
-        
-        
-        # dataset.setROI(396, 469 , 201, 50)
-        # dataset.setROI(196, 469 , 201)
+        # num_frames = dataset.imageRaw.shape[0]
+        # dataset.image_inv =  dataset.imageRaw[np.linspace(0, num_frames -2, int(num_frames/2), dtype = 'int'), :, :].copy()
+
         # dataset.setROI(200, 0 , 600, 1024)
-        dataset.show_im_raw()
+
+        # dataset.show_im_raw()
         
-        dataset.choose_freq() # also removes any duplicate in frequency
+        # dataset.choose_freq() # also removes any duplicate in frequency
         
         #%% invert the raw image
         
@@ -593,14 +643,14 @@ if __name__ == "__main__" :
         lsqr_niter = 5
         lsqr_damp = 1e-4
         
-        dataset.p_invert(base = base)
+        # dataset.p_invert(base = base)
         
         # dataset.invert_and_denoise1D_no_for(base = base, lamda = lamda, niter_out = niter_out,
                                 # niter_in = niter_in, lsqr_niter = lsqr_niter, lsqr_damp = lsqr_damp)
         # invert_and_denoise3D_v2(base = base, lamda = lamda, niter_out = niter_out,
                                 # niter_in = niter_in, lsqr_niter = lsqr_niter, lsqr_damp = lsqr_damp)
         
-        # dataset.show_inverted()
+        dataset.show_inverted()
         
         # dataset.show_inverted_xy()
         # dataset.show_inverted_xz()
@@ -615,38 +665,11 @@ if __name__ == "__main__" :
         
         
         #%% save the inverted image
-
-        # save_file = 'Users/marcovitali/Documents/Poli/tesi/ScopeFoundy/coherentSVIM/data/data_28_4_22/220428_124841_coherent_SVIM_phantom2_good_inverted.tif'        
-        
-        # try:
-        #     os.remove(save_file)
-        # except:
-        #     print('file name not found')
-            
-            
-        # dataset.save_inverted(save_file)
-        
-        try:
-        
-            fname = "D:\\LabPrograms\\ScopeFoundry_POLIMI\\smSVIM_microscope_analyser\\analysed\\220511\\volume_1_rog_leaf.h5"
-            parent = h5py.File(fname,'w')
-    
-            # create groups
-            results = parent.create_group('level1') 
-            
-    
-            # create a dataset
-    
-            parent.create_dataset('inverted_image', shape=dataset.image_inv.shape, data = dataset.image_inv)
-            # parent['voltage2'] = signalA
-    
-            # create attributes (not in the parents)
-            results.attrs['sample'] = 'GFP'
-            results.attrs['microscope_type'] = 'SIM'
-            results.attrs['inversion_parameters'] = dataset.param
-
-        finally:
-            parent.close()
+        dataset.image_inv = dataset.imageRaw
+        dataset.params['save_label'] = 'pos_neg_merged'
+        dataset.params['single_volume_time_index'] = 0
+        dataset.ROI_s_z = 600
+        dataset.save_inverted()
             
             
         #%% load a saved reconstructed image
@@ -659,7 +682,9 @@ if __name__ == "__main__" :
         # from qtpy.QtWidgets import QApplication
         
         # fname = '/Users/marcovitali/Documents/Poli/tesi/ScopeFoundy/coherentSVIM/220509_163108_coherent_SVIM_plant1_elongation_diffuser_INVERTED_denoise_05.h5'
-        fname = '/Users/marcovitali/Documents/Poli/tesi/ScopeFoundy/coherentSVIM/220509_163108_coherent_SVIM_plant1_elongation_diffuser_INVERTED_2.h5'
+        # fname = '/Users/marcovitali/Documents/Poli/tesi/ScopeFoundy/coherentSVIM/220509_163108_coherent_SVIM_plant1_elongation_diffuser_INVERTED_2.h5'
+        
+        
         
         # h5file = h5py.File(fname,'r')
         
@@ -685,17 +710,7 @@ if __name__ == "__main__" :
         
         
         #%% invert a series of time frames and save for each of them a sigle image (given xy plane or sum along z) in the list called stack
-        # they have been reanmed in a quick and dirty way using MS file explorer to have a sequential name
-        
-        # fname = "D:\\data\\coherent_svim\\220511_camaleon_plant\\220511_114841_coherent_SVIM_cy36_atp_second_round_ ("
-        # fname = "D:\\data\\coherent_svim\\220511_camaleon_plant\\220511_131028_coherent_SVIM_cy36_atp_third_round_ ("
-        
-        # >> In the next dataset we can see a response to the external stimulus << 
-        fname= "D:\\data\\coherent_svim\\220511_gfp_plant\\220511_155605_coherent_SVIM_rog_h2o2_first_round_ ("
-        
-        # fname= "D:\\data\\coherent_svim\\220511_gfp_plant\\220511_155605_coherent_SVIM_rog_h2o2_second_round_ ("
-        # fname = "D:\\data\\coherent_svim\\220511_gfp_plant\\220511_173125_coherent_SVIM_rog_h2o2_leaf_ ("
-        
+
         
         stack = []
         
