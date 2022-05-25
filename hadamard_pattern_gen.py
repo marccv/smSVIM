@@ -141,3 +141,15 @@ if __name__ == '__main__':
         fig1.colorbar(xy, ax=ax1)
         
     print(images[1,int(1080/2-15):int(1080/2+15),int(1920/2-15):int(1920/2+15)])
+    
+    
+    
+    
+    #%%
+    n = 8
+    mat = hadamard(n)
+    
+    b = 1/n * mat@mat
+    
+    print(b)
+    

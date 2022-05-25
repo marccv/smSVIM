@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>1084</width>
-    <height>731</height>
+    <width>1085</width>
+    <height>700</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -325,6 +325,9 @@
                  <property name="maximum">
                   <number>99999</number>
                  </property>
+                 <property name="value">
+                  <number>924</number>
+                 </property>
                 </widget>
                </item>
                <item row="0" column="0">
@@ -368,6 +371,9 @@
                  </property>
                  <property name="maximum">
                   <number>99999</number>
+                 </property>
+                 <property name="value">
+                  <number>924</number>
                  </property>
                 </widget>
                </item>
@@ -663,68 +669,6 @@
            </property>
            <layout class="QVBoxLayout" name="verticalLayout_4">
             <item>
-             <widget class="QComboBox" name="comboBox_time_lapse_mode">
-              <property name="font">
-               <font>
-                <pointsize>13</pointsize>
-                <weight>50</weight>
-                <bold>false</bold>
-               </font>
-              </property>
-              <item>
-               <property name="text">
-                <string>sum time frame planes</string>
-               </property>
-              </item>
-              <item>
-               <property name="text">
-                <string>single plane per time frame</string>
-               </property>
-              </item>
-             </widget>
-            </item>
-            <item>
-             <layout class="QGridLayout" name="gridLayout_12" columnstretch="2,0">
-              <property name="leftMargin">
-               <number>30</number>
-              </property>
-              <item row="0" column="1">
-               <widget class="QSpinBox" name="spinBox_time_laps_plane">
-                <property name="enabled">
-                 <bool>false</bool>
-                </property>
-                <property name="font">
-                 <font>
-                  <pointsize>13</pointsize>
-                  <weight>50</weight>
-                  <bold>false</bold>
-                 </font>
-                </property>
-               </widget>
-              </item>
-              <item row="0" column="0">
-               <widget class="QLabel" name="label_tl_plane">
-                <property name="enabled">
-                 <bool>false</bool>
-                </property>
-                <property name="font">
-                 <font>
-                  <pointsize>13</pointsize>
-                  <weight>50</weight>
-                  <bold>false</bold>
-                 </font>
-                </property>
-                <property name="text">
-                 <string>plane to save from each time frame:</string>
-                </property>
-                <property name="wordWrap">
-                 <bool>true</bool>
-                </property>
-               </widget>
-              </item>
-             </layout>
-            </item>
-            <item>
              <layout class="QHBoxLayout" name="horizontalLayout_2">
               <property name="topMargin">
                <number>0</number>
@@ -794,6 +738,68 @@
                 </property>
                 <property name="text">
                  <string>yz</string>
+                </property>
+               </widget>
+              </item>
+             </layout>
+            </item>
+            <item>
+             <widget class="QComboBox" name="comboBox_time_lapse_mode">
+              <property name="font">
+               <font>
+                <pointsize>13</pointsize>
+                <weight>50</weight>
+                <bold>false</bold>
+               </font>
+              </property>
+              <item>
+               <property name="text">
+                <string>sum time frame planes</string>
+               </property>
+              </item>
+              <item>
+               <property name="text">
+                <string>single plane per time frame</string>
+               </property>
+              </item>
+             </widget>
+            </item>
+            <item>
+             <layout class="QGridLayout" name="gridLayout_12" columnstretch="2,0">
+              <property name="leftMargin">
+               <number>30</number>
+              </property>
+              <item row="0" column="1">
+               <widget class="QSpinBox" name="spinBox_time_laps_plane">
+                <property name="enabled">
+                 <bool>false</bool>
+                </property>
+                <property name="font">
+                 <font>
+                  <pointsize>13</pointsize>
+                  <weight>50</weight>
+                  <bold>false</bold>
+                 </font>
+                </property>
+               </widget>
+              </item>
+              <item row="0" column="0">
+               <widget class="QLabel" name="label_tl_plane">
+                <property name="enabled">
+                 <bool>false</bool>
+                </property>
+                <property name="font">
+                 <font>
+                  <pointsize>13</pointsize>
+                  <weight>50</weight>
+                  <bold>false</bold>
+                 </font>
+                </property>
+                <property name="text">
+                 <string>plane to save from each time frame:</string>
+                </property>
+                <property name="wordWrap">
+                 <bool>true</bool>
                 </property>
                </widget>
               </item>
@@ -1127,7 +1133,7 @@
                </font>
               </property>
               <property name="text">
-               <string>Visualize inverted image</string>
+               <string>Visualize inverted volume</string>
               </property>
              </widget>
             </item>
@@ -1141,189 +1147,98 @@
                </font>
               </property>
               <property name="text">
-               <string>Show inverted image</string>
+               <string>Show inverted volume</string>
               </property>
              </widget>
             </item>
             <item>
-             <widget class="QGroupBox" name="groupBox_plot">
-              <property name="enabled">
-               <bool>false</bool>
+             <layout class="QGridLayout" name="gridLayout_16">
+              <property name="leftMargin">
+               <number>30</number>
               </property>
-              <property name="title">
-               <string/>
+              <property name="topMargin">
+               <number>0</number>
               </property>
-              <layout class="QVBoxLayout" name="verticalLayout_3">
-               <item>
-                <widget class="QPushButton" name="pushButton_show_inverted_xz">
-                 <property name="font">
-                  <font>
-                   <pointsize>13</pointsize>
-                   <weight>50</weight>
-                   <bold>false</bold>
-                  </font>
-                 </property>
-                 <property name="text">
-                  <string>Plot View</string>
-                 </property>
-                </widget>
-               </item>
-               <item>
-                <layout class="QGridLayout" name="gridLayout_16">
-                 <property name="leftMargin">
-                  <number>30</number>
-                 </property>
-                 <property name="topMargin">
-                  <number>0</number>
-                 </property>
-                 <item row="0" column="0">
-                  <widget class="QLabel" name="label_12">
-                   <property name="font">
-                    <font>
-                     <pointsize>13</pointsize>
-                     <weight>50</weight>
-                     <bold>false</bold>
-                    </font>
-                   </property>
-                   <property name="text">
-                    <string>View:</string>
-                   </property>
-                  </widget>
-                 </item>
-                 <item row="0" column="1">
-                  <widget class="QRadioButton" name="radioButton">
-                   <property name="font">
-                    <font>
-                     <pointsize>13</pointsize>
-                     <weight>50</weight>
-                     <bold>false</bold>
-                    </font>
-                   </property>
-                   <property name="text">
-                    <string>xy</string>
-                   </property>
-                  </widget>
-                 </item>
-                 <item row="0" column="2">
-                  <widget class="QRadioButton" name="radioButton_2">
-                   <property name="font">
-                    <font>
-                     <pointsize>13</pointsize>
-                     <weight>50</weight>
-                     <bold>false</bold>
-                    </font>
-                   </property>
-                   <property name="text">
-                    <string>xz</string>
-                   </property>
-                   <property name="checked">
-                    <bool>true</bool>
-                   </property>
-                  </widget>
-                 </item>
-                 <item row="0" column="3">
-                  <widget class="QRadioButton" name="radioButton_3">
-                   <property name="font">
-                    <font>
-                     <pointsize>13</pointsize>
-                     <weight>50</weight>
-                     <bold>false</bold>
-                    </font>
-                   </property>
-                   <property name="text">
-                    <string>yz</string>
-                   </property>
-                  </widget>
-                 </item>
-                </layout>
-               </item>
-               <item>
-                <layout class="QGridLayout" name="gridLayout_15">
-                 <property name="leftMargin">
-                  <number>30</number>
-                 </property>
-                 <property name="topMargin">
-                  <number>0</number>
-                 </property>
-                 <property name="spacing">
-                  <number>0</number>
-                 </property>
-                 <item row="0" column="0">
-                  <widget class="QComboBox" name="comboBox">
-                   <property name="font">
-                    <font>
-                     <pointsize>13</pointsize>
-                     <weight>50</weight>
-                     <bold>false</bold>
-                    </font>
-                   </property>
-                   <item>
-                    <property name="text">
-                     <string>Sum of planes</string>
-                    </property>
-                   </item>
-                   <item>
-                    <property name="text">
-                     <string>Single plane</string>
-                    </property>
-                   </item>
-                  </widget>
-                 </item>
-                </layout>
-               </item>
-               <item>
-                <layout class="QGridLayout" name="gridLayout_17" columnstretch="0,0,0">
-                 <property name="leftMargin">
-                  <number>30</number>
-                 </property>
-                 <property name="topMargin">
-                  <number>0</number>
-                 </property>
-                 <property name="rightMargin">
-                  <number>0</number>
-                 </property>
-                 <item row="0" column="1">
-                  <widget class="QSpinBox" name="spinBox">
-                   <property name="font">
-                    <font>
-                     <pointsize>13</pointsize>
-                     <weight>50</weight>
-                     <bold>false</bold>
-                    </font>
-                   </property>
-                  </widget>
-                 </item>
-                 <item row="0" column="0">
-                  <widget class="QLabel" name="label_21">
-                   <property name="font">
-                    <font>
-                     <pointsize>13</pointsize>
-                     <weight>50</weight>
-                     <bold>false</bold>
-                    </font>
-                   </property>
-                   <property name="text">
-                    <string>Single plane to plot:</string>
-                   </property>
-                  </widget>
-                 </item>
-                 <item row="0" column="2">
-                  <spacer name="horizontalSpacer">
-                   <property name="orientation">
-                    <enum>Qt::Horizontal</enum>
-                   </property>
-                   <property name="sizeHint" stdset="0">
-                    <size>
-                     <width>40</width>
-                     <height>20</height>
-                    </size>
-                   </property>
-                  </spacer>
-                 </item>
-                </layout>
-               </item>
-              </layout>
-             </widget>
+              <item row="0" column="0">
+               <widget class="QLabel" name="label_12">
+                <property name="font">
+                 <font>
+                  <pointsize>13</pointsize>
+                  <weight>50</weight>
+                  <bold>false</bold>
+                 </font>
+                </property>
+                <property name="text">
+                 <string>View:</string>
+                </property>
+               </widget>
+              </item>
+              <item row="0" column="1">
+               <widget class="QRadioButton" name="radioButton_plot_xy">
+                <property name="font">
+                 <font>
+                  <pointsize>13</pointsize>
+                  <weight>50</weight>
+                  <bold>false</bold>
+                 </font>
+                </property>
+                <property name="text">
+                 <string>xy</string>
+                </property>
+               </widget>
+              </item>
+              <item row="0" column="2">
+               <widget class="QRadioButton" name="radioButton_plot_xz">
+                <property name="font">
+                 <font>
+                  <pointsize>13</pointsize>
+                  <weight>50</weight>
+                  <bold>false</bold>
+                 </font>
+                </property>
+                <property name="text">
+                 <string>xz</string>
+                </property>
+                <property name="checked">
+                 <bool>true</bool>
+                </property>
+               </widget>
+              </item>
+              <item row="0" column="3">
+               <widget class="QRadioButton" name="radioButton_plot_yz">
+                <property name="font">
+                 <font>
+                  <pointsize>13</pointsize>
+                  <weight>50</weight>
+                  <bold>false</bold>
+                 </font>
+                </property>
+                <property name="text">
+                 <string>yz</string>
+                </property>
+               </widget>
+              </item>
+             </layout>
+            </item>
+            <item>
+             <layout class="QGridLayout" name="gridLayout_15">
+              <property name="leftMargin">
+               <number>30</number>
+              </property>
+              <property name="topMargin">
+               <number>0</number>
+              </property>
+              <property name="spacing">
+               <number>0</number>
+              </property>
+              <item row="0" column="0">
+               <widget class="QCheckBox" name="checkBox_plot_sum">
+                <property name="text">
+                 <string>Sum along view direction</string>
+                </property>
+               </widget>
+              </item>
+             </layout>
             </item>
             <item>
              <spacer name="verticalSpacer_5">
@@ -1356,7 +1271,7 @@
     <rect>
      <x>0</x>
      <y>0</y>
-     <width>1084</width>
+     <width>1085</width>
      <height>24</height>
     </rect>
    </property>

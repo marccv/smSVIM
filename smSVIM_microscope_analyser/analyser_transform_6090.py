@@ -10,6 +10,7 @@ Created on Fri Apr 22 15:25:23 2022
 import numpy as np
 import transform_6090 as t_6090
 import scipy.fftpack as sp_fft
+from scipy.linalg import hadamard
 from get_h5_data import get_h5_dataset, get_h5_attr
 import tifffile as tiff
 import time
@@ -169,23 +170,34 @@ class coherentSVIM_analysis:
         for key, val in kwargs.items():
             self.params[key] = val
         
-        self.transform = t_6090.dct_6090(self.disp_freqs)
-        self.transform.create_space()
+        
         
         if self.params['base'] == 'cos':
+            self.transform = t_6090.dct_6090(self.disp_freqs)
+            self.transform.create_space()
             self.transform.create_matrix_cos()
             self.transform.compute_inverse()
             self.image_inv = np.tensordot(self.transform.inv_matrix ,  self.imageRaw , axes=([1],[0]))
             
         elif self.params['base'] == 'sq':
+            self.transform = t_6090.dct_6090(self.disp_freqs)
+            self.transform.create_space()
             self.transform.create_matrix_sq()
             self.transform.compute_inverse()
             self.image_inv = np.tensordot(self.transform.inv_matrix ,  self.imageRaw , axes=([1],[0]))
+            
+        elif self.params['base'] == 'hadam':
+            self.ROI_s_z = get_h5_attr(self.file_path, 'ROI_s_z')[0]
+            self.params['had_pat_num'] = get_h5_attr(self.file_path, 'had_pat_num')[0]
+            inv_matrix = (1/self.params['had_pat_num'])*hadamard(int(self.params['had_pat_num']))
+            self.image_inv = np.tensordot(inv_matrix ,  self.imageRaw , axes=([1],[0]))
             
         elif self.params['base'] == 'sp_dct':
             dct_coeff = self.imageRaw
             dct_coeff[0,:,:] *= 1/np.sqrt(2)  # I rescale the cw illumination >> It just shifts the inverted image towards more negative values
             self.image_inv = sp_fft.idct(dct_coeff, type = 2, axis = 0, norm = 'ortho')
+        
+        
         
         self.denoised = False
         self.clipped = False
@@ -244,18 +256,23 @@ class coherentSVIM_analysis:
         for key, val in kwargs.items():
             self.params[key] = val
         
-        self.transform = t_6090.dct_6090(self.disp_freqs)
-        self.transform.create_space()
-    
         if self.params['base'] == 'cos':
+            self.transform = t_6090.dct_6090(self.disp_freqs)
+            self.transform.create_space()
             self.transform.create_matrix_cos()
+            M = self.transform.matrix
             
         elif self.params['base'] == 'sq':
+            self.transform = t_6090.dct_6090(self.disp_freqs)
+            self.transform.create_space()
             self.transform.create_matrix_sq()
+            M = self.transform.matrix
+            
+        elif self.params['base'] == 'hadam':
+            M = (1/self.params['had_pat_num'])*hadamard(int(self.params['had_pat_num']))
         
         nz,ny,nx = self.imageRaw.shape
         shape = (nz,ny,nx)
-        M = self.transform.matrix
         M = M.astype(float)
         Nz = M.shape[1]
         
@@ -306,18 +323,25 @@ class coherentSVIM_analysis:
         for key, val in kwargs.items():
             self.params[key] = val
         
-        self.transform = t_6090.dct_6090(self.disp_freqs)
-        self.transform.create_space()
+        
     
         if self.params['base'] == 'cos':
+            self.transform = t_6090.dct_6090(self.disp_freqs)
+            self.transform.create_space()
             self.transform.create_matrix_cos()
+            M = self.transform.matrix
             
         elif self.params['base'] == 'sq':
+            self.transform = t_6090.dct_6090(self.disp_freqs)
+            self.transform.create_space()
             self.transform.create_matrix_sq()
+            M = self.transform.matrix
+            
+        elif self.params['base'] == 'hadam':
+            M = (1/self.params['had_pat_num'])*hadamard(int(self.params['had_pat_num']))
         
         nz,ny,nx = self.imageRaw.shape
         shape = (nz,ny,nx)
-        M = self.transform.matrix
         M = M.astype(float)
         
         Nz = M.shape[1]
@@ -509,6 +533,7 @@ class coherentSVIM_analysis:
             h5dataset.dims[1].label = "y"
             h5dataset.dims[2].label = "x"
             
+            self.ROI_s_z = get_h5_attr(self.file_path, 'ROI_s_z')[0]
             dmdPx_to_sample_ratio = 1.247 # (um/px)
             z_sample_period = self.ROI_s_z * dmdPx_to_sample_ratio / self.image_inv.shape[0] 
             h5dataset.attrs['element_size_um'] =  [z_sample_period,0.65,0.65]

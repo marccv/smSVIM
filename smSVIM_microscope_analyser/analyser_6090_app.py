@@ -7,49 +7,19 @@ Created on Fri May 20 16:23:38 2022
 """
 
 import sys
-from PyQt5 import QtWidgets, uic, QtGui
+from qtpy import QtWidgets, uic
 import qtpy.QtCore
 import pyqtgraph as pg
 from get_h5_data import get_h5_dataset, get_h5_attr
 import h5py
 from analyser_transform_6090 import coherentSVIM_analysis
 
-import matplotlib.pyplot as plt
-from matplotlib.figure import Figure
-from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
+import numpy as np
 
-class matplotlib_window(QtGui.QMainWindow):
-    
-    def __init__(self, parent=None):
-        super(matplotlib_window, self).__init__(parent)
-        
-        
-        self.figure = plt.figure()
-        
-        widget = QtWidgets.QWidget()
-        
-        
-        layout = QtWidgets.QVBoxLayout()
-        
-        button = QtWidgets.QPushButton('ciao')
-        
-        # static_canvas = FigureCanvas(self.figure)
-        
-        # layout.addWidget(NavigationToolbar(static_canvas, self))
-        # layout.addWidget(static_canvas)
-        
-        layout.addWidget(button)
-        
-        widget.setLayout(layout)
-        self.setCentralWidget(widget)
-        
-        
-        self.figure.clear()
-        self.ax = self.figure.add_subplot(111)
-        
-        self.show()
-        
-        
+# import matplotlib.pyplot as plt
+# from matplotlib.figure import Figure
+# from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
+
 
 
 class basic_app(coherentSVIM_analysis):
@@ -59,13 +29,12 @@ class basic_app(coherentSVIM_analysis):
         self.qtapp = QtWidgets.QApplication(argv)
         self.name = 'basic_app'
         self.qtapp.setApplicationName(self.name)
-        self.qtapp.setStyle("mac")
         self.dialogs = list()
       
         
     def setup(self):
         
-        self.ui_filename = 'analyser_6090.ui'
+        self.ui_filename = 'analyser_6090_tabs.ui'
         self.ui = uic.loadUi(self.ui_filename)
         
         # file path and load
@@ -78,7 +47,7 @@ class basic_app(coherentSVIM_analysis):
         
         # base selection
         
-        self.bases = ['cos', 'sq']
+        self.bases = ['cos', 'sq', 'hadam']
         
         # select ROI
         
@@ -111,19 +80,11 @@ class basic_app(coherentSVIM_analysis):
         def update_t_frame_index():  self.t_frame_index = self.ui.spinBox_t_frame_index.value()
         self.ui.spinBox_t_frame_index.valueChanged.connect(update_t_frame_index)
         
-        self.ui.pushButton_show_raw_im.clicked.connect(self.get_and_show_im_raw)
-        self.ui.pushButton_invert.clicked.connect(self.get_and_invert)
+        self.ui.pushButton_show_raw_im.clicked.connect(self.show_im_raw_app)
+        self.ui.pushButton_invert.clicked.connect(self.invert_volume_app)
         
-        #TODO see if this is necessary
-        self.params['save_label'] = ''
-        def update_save_label(): self.params['save_label'] = self.ui.lineEdit_save_label.text()
-        self.ui.lineEdit_save_label.textEdited.connect(update_save_label)
-        
-        self.ui.pushButton_save_inverted.clicked.connect(self.save_inverted_and_update_status)
-        
-        self.ui.pushButton_show_inverted.clicked.connect(self.show_inverted)
-        # self.ui.pushButton_show_inverted_xy.clicked.connect(self.show_projections) #TODO make work
-        self.ui.pushButton_show_inverted_xz.clicked.connect(self.show_projections)
+        self.ui.pushButton_save_inverted.clicked.connect(self.save_inverted_app)
+        self.ui.pushButton_show_inverted.clicked.connect(self.show_projections_app)
         
         
         
@@ -150,13 +111,13 @@ class basic_app(coherentSVIM_analysis):
         
     def file_browser(self):
         
-        self.new_file_path, _ = QtWidgets.QFileDialog.getOpenFileName(directory = self.file_path, filter = '*coherent_SVIM*.h5')
+        self.new_file_path, _ = QtWidgets.QFileDialog.getOpenFileName(directory = self.file_path, filter = '*.h5')
         # print(self.file_path)
         self.ui.lineEdit_file_path.setText(self.new_file_path)
         self.ui.pushButton_load_dataset.setEnabled(True)
     
     
-    def gather_params(self):
+    def _gather_params(self):
         
         params_from_ui = {'base': self.bases[self.ui.comboBox_base.currentIndex()],
                           'select_ROI': self.ui.checkBox_select_ROI.isChecked(),
@@ -173,6 +134,8 @@ class basic_app(coherentSVIM_analysis):
                           'lsqr_damp':self.ui.doubleSpinBox_lsqr_damp.value(),
                           'single_volume_time_index': self.ui.spinBox_t_frame_index.value(),
                           'save_label': self.ui.lineEdit_save_label.text(),
+                          'plot_view': (1*self.ui.radioButton_plot_xz.isChecked() + 2*self.ui.radioButton_plot_yz.isChecked()),
+                          'plot_sum':  self.ui.checkBox_plot_sum.isChecked(),
                           'time_lapse_mode': self.time_lapse_modes[self.ui.comboBox_time_lapse_mode.currentIndex()],
                           'time_lapse_view': ( 1*self.ui.radioButton_xz.isChecked() + 2*self.ui.radioButton_yz.isChecked()),
                           'time_lapse_plane' : self.ui.spinBox_time_laps_plane.value(),
@@ -183,22 +146,33 @@ class basic_app(coherentSVIM_analysis):
     
     def update_params(self):
         
-        for key, val in self.gather_params().items():
+        for key, val in self._gather_params().items():
             self.params[key] = val
     
     def load_file_path(self):
-        super().__init__(self.new_file_path, self.gather_params())
+        super().__init__(self.new_file_path, self._gather_params())
         self.ui.groupBox_invert_single_volume.setEnabled(True)
         self.ui.label_status.setText('Ready to invert')
         self.ui.pushButton_save_inverted.setEnabled(False)
         self.ui.lineEdit_save_label.setEnabled(False)
         self.ui.label_save_label.setEnabled(False)
         self.ui.pushButton_show_inverted.setEnabled(False)
-        self.ui.groupBox_plot.setEnabled(False)
+        self.ui.label_plot_view.setEnabled(False)
+        self.ui.radioButton_plot_xy.setEnabled(False)
+        self.ui.radioButton_plot_xz.setEnabled(False)
+        self.ui.radioButton_plot_yz.setEnabled(False)
+        self.ui.checkBox_plot_sum.setEnabled(False)
         self.ui.pushButton_save_inverted_time_lapse.setEnabled(False)
         self.ui.label_save_label_tl.setEnabled(False)
         self.ui.lineEdit_save_label_tl.setEnabled(False)
         self.ui.pushButton_show_time_lapse.setEnabled(False)
+        
+        
+        if self.new_file_path.find('Hadamard') != -1:
+            self.ui.comboBox_base.setCurrentIndex(2)
+        elif self.new_file_path.find('DMD_light_sheet') != -1:
+            print('LIGHT_SHEET')
+        
         
         try:
             self.time_lapse = get_h5_attr(self.file_path, 'time_laps')[0] #TODO correct LAPS
@@ -208,10 +182,10 @@ class basic_app(coherentSVIM_analysis):
             self.params['time_frames_n'] = get_h5_attr(self.file_path, 'time_frames_n')[0]
             self.ui.spinBox_t_frame_index.setMaximum(self.params['time_frames_n'] -1)
         except:
-            self.time_frames_n = None
+            self.params['time_frames_n'] = None
             
         temp = 'time_frames_n'
-        self.ui.label_time_lapse.setText(f'{self.time_lapse} ({self.params[temp] } time frame)')
+        self.ui.label_time_lapse.setText(f'{self.time_lapse} ({self.params[temp] } time frame(s))')
         self.PosNeg = get_h5_attr(self.file_path, 'PosNeg')[0]
         self.ui.label_PosNeg.setText(f'{self.PosNeg}')
         self.subarray_hsize = get_h5_attr(self.file_path, 'subarray_hsize')[0]
@@ -232,7 +206,7 @@ class basic_app(coherentSVIM_analysis):
             self.ui.pushButton_invert_time_lapse.setEnabled(True)
     
     
-    def get_and_show_im_raw(self):
+    def show_im_raw_app(self):
         self.update_params()
         self.load_h5_file(self.t_frame_index)
         if self.select_ROI: self.setROI()
@@ -240,7 +214,7 @@ class basic_app(coherentSVIM_analysis):
         self.show_im_raw()    
      
 
-    def get_and_invert(self):
+    def invert_volume_app(self):
         
         self.ui.label_status.setText('Inverting, please wait...')
         self.update_params()
@@ -249,16 +223,24 @@ class basic_app(coherentSVIM_analysis):
         if self.select_ROI: self.setROI()
         if self.PosNeg: self.merge_pos_neg()
         
-        self.choose_freq()
         
         if not self.denoise:
-            try:
+            # try:
+                
+            if self.params['base'] != 'hadam':
+                self.choose_freq()
                 self.p_invert()
-            except:
-                print('Could not invert')
+            else:
+                self.invert()
+            # except:
+                # print('Could not invert')
                     
         else:
+            if self.params['base'] != 'hadam':
+                self.choose_freq()
+                
             self.invert_and_denoise3D_v2()  
+            
             
         self.inverted = True
         self.ui.label_status.setText('Single Volume inversion completed')
@@ -266,25 +248,48 @@ class basic_app(coherentSVIM_analysis):
         self.ui.lineEdit_save_label.setEnabled(True)
         self.ui.label_save_label.setEnabled(True)
         self.ui.pushButton_show_inverted.setEnabled(True)
+        self.ui.label_plot_view.setEnabled(True)
+        self.ui.radioButton_plot_xy.setEnabled(True)
+        self.ui.radioButton_plot_xz.setEnabled(True)
+        self.ui.radioButton_plot_yz.setEnabled(True)
+        self.ui.checkBox_plot_sum.setEnabled(True)
         
         
         
-    def save_inverted_and_update_status(self):
         
-        self.gather_params()
+        
+    def save_inverted_app(self):
+        
+        self.update_params()
         self.save_inverted()
         self.ui.label_status.setText('Inverted Volume saved')
         
         
-    def show_projections(self):
+    def show_projections_app(self):
         
-        dialog = matplotlib_window()
-        # self.dialogs.append(dialog)
-        dialog.show()
+        self.update_params()
         
-        # self.show_inverted_xz(plane = 'sum', fig = dialog.figure, ax = dialog.ax)
-     
+        dmdPx_to_sample_ratio = 1.247 # (um/px)
+        aspect_xz = (self.ROI_s_z * dmdPx_to_sample_ratio / self.image_inv.shape[0] )/0.65
         
+        if self.params['plot_sum']:
+            
+            if self.params['plot_view'] == 0: #xy
+                image = np.sum(self.image_inv, 0)
+            elif self.params['plot_view'] == 1: #xz
+                image = np.repeat(np.sum(self.image_inv, 2).transpose(), aspect_xz, 1)
+            elif self.params['plot_view'] == 2: #yz
+                image = np.repeat(np.sum(self.image_inv, 1), aspect_xz, 0)
+        else:
+            
+            if self.params['plot_view'] == 0:
+                image = self.image_inv
+            elif self.params['plot_view'] == 1:
+                image= np.repeat(self.image_inv.transpose(2,1,0), aspect_xz, 2)
+            elif self.params['plot_view'] == 2:
+                image = np.repeat(self.image_inv.transpose(1,0,2), aspect_xz, 1)
+                
+        pg.image(image, title= f"Inverted image (base: {self.params['base']})")      
     
         
     def invert_tl_app(self):
@@ -301,7 +306,7 @@ class basic_app(coherentSVIM_analysis):
         
     def save_time_lapse_app(self):
         
-        # print('saving')
+        self.update_params()
         self.save_time_lapse()
         self.ui.label_status.setText('Time Lapse saved')
         
