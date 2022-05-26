@@ -46,35 +46,115 @@ def time_it(method):
     return inner
 
 
+images = []
+plots = []
+QAPP = None
 
+def show_image(image,  **kwargs):
+    
+    
+    show_params = {'ordinate': 'X',
+                   'ascisse' : 'Y',
+                   'scale_ord' : 1,
+                   'scale_asc' : 1}
+    
+    
+    for key, val in kwargs.items():
+        show_params[key] = val
+    
+    
+    app = pg.mkQApp()
+    plot = pg.PlotItem()
+    
+    ordinate_text = f'<strong style="font-size: 20px;">{show_params["ordinate"]} axis</strong>'
+    ascisse_text = f'<strong style="font-size: 20px;">{show_params["ascisse"]} axis</strong>'
+    plot.setLabel(axis='left', text= ascisse_text,  units = 'm')
+    plot.setLabel(axis='bottom', text=  ordinate_text, units = 'm')
+    
+    
+    w = pg.ImageView(view = plot)
+    img = w.getImageItem()
+    tlabel = pg.InfLineLabel(w.timeLine, text="{value:.0f}")
+    
+    windowTitle = kwargs.pop("title", "ImageView")
+    w.setWindowTitle(windowTitle)
+    w.setImage(image, scale = (show_params["scale_ord"], show_params["scale_asc"]), pos = (0, 0))
+    images.append(w)
+    w.show()
+    
+    
+    def imageHoverEvent(event):
+        """Show the position, pixel, and value under the mouse cursor.
+        """
+        if event.isExit():
+            plot.setTitle("")
+            return
+        pos = event.pos()
+        i, j  = pos.y(), pos.x()
+        time_index = w.currentIndex
+        # print(dir(pos))
+        
+        if len(image.shape) == 2:
+        
+            # i = int(np.clip(i, 0, image.shape[0] - 1))
+            # j = int(np.clip(j, 0, image.shape[1] - 1))
+            # val = image[i, j]
+            # print(val)
+            ppos = img.mapToParent(pos)
+            x, y = ppos.x(), ppos.y()
+            
+        else:
+            
+            # i = int(np.clip(i, 0, image.shape[1] - 1))
+            # j = int(np.clip(j, 0, image.shape[2] - 1))
+            # val = image[time_index ,i, j]
+            # print(val)
+            ppos = img.mapToParent(pos)
+            x, y = ppos.x(), ppos.y()
+            
+        plot.setTitle("pos: (%.1f, %.1f)um  -- pixel: (%d, %d, %d)" % (x*1e6, y*1e6, time_index, i, j), font = 15)
+        
+        # plot.setTitle("value: %d" % ( val))
+
+    # Monkey-patch the image to use our custom hover function. 
+    # This is generally discouraged (you should subclass ImageItem instead),
+    # but it works for a very simple use like this. 
+    img.hoverEvent = imageHoverEvent
+    
+    
+    return w
 
 
 class coherentSVIM_analysis:
     
     name = 'coherentSVIM_analysis'
 
-    def __init__(self, fname, params = None ):
+    def __init__(self, fname, **kwargs ):
         
-        if params is None:
-            self.params = {'base': 'cos',
-                           'select_ROI': False,
-                           'denoise' : False,
-                           'X0': 0,
-                           'Y0': 0,
-                           'delta_x' : 0,
-                           'delta_y' : 0,
-                           'mu': 0.01,
-                           'lamda': 0.5,
-                           'niter_out': 15,
-                           'niter_in': 2,
-                           'lsqr_niter': 5,
-                           'lsqr_damp': 1e-4,
-                           'single_volume_time_index' : 0,
-                           'save_label': '',
-                           'save_label_time_lapse': '',
-                           'time_lapse_mode': 'sum'}
-        else:
-            self.params = params
+        #default values
+        self.params = {'base': 'cos',
+                       'select_ROI': False,
+                       'denoise' : False,
+                       'X0': 0,
+                       'Y0': 0,
+                       'delta_x' : 0,
+                       'delta_y' : 0,
+                       'mu': 0.01,
+                       'lamda': 0.5,
+                       'niter_out': 15,
+                       'niter_in': 2,
+                       'lsqr_niter': 5,
+                       'lsqr_damp': 1e-4,
+                       'single_volume_time_index' : 0,
+                       'save_label': '',
+                       'time_lapse_save_label': '',
+                       'time_lapse_mode': 'sum',
+                       'time_lapse_view': 0,
+                       'time_lapse_plane': 0}
+        
+        # update any specified parameter
+        for key, val in kwargs.items():
+            self.params[key] = val
         
         self.file_path  = fname
         
@@ -86,8 +166,9 @@ class coherentSVIM_analysis:
 
     
     def show_im_raw(self):
-        
-        pg.image(self.imageRaw, title="Raw image")    
+                
+        show_image(self.imageRaw.transpose(0,1,2), title="Raw image", ordinate = 'X', ascisse = 'Y', 
+                   scale_ord = 0.65e-6, scale_asc = 0.65e-6)    
         
         if self.name == 'coherentSVIM_analysis':
             #keeps the window open running a QT application
@@ -269,6 +350,8 @@ class coherentSVIM_analysis:
             M = self.transform.matrix
             
         elif self.params['base'] == 'hadam':
+            self.ROI_s_z = get_h5_attr(self.file_path, 'ROI_s_z')[0]
+            self.params['had_pat_num'] = get_h5_attr(self.file_path, 'had_pat_num')[0]
             M = (1/self.params['had_pat_num'])*hadamard(int(self.params['had_pat_num']))
         
         nz,ny,nx = self.imageRaw.shape
@@ -290,7 +373,7 @@ class coherentSVIM_analysis:
         
         Dop = pylops.FirstDerivative(Nz*ny*nx, (Nz, ny, nx),  0, edge=True, kind="backward")
         
-        self.params['denoise_type': '1D']
+        self.params['denoise_type'] =  '1D'
         print(shape)
         
         t = time.time()
@@ -310,7 +393,7 @@ class coherentSVIM_analysis:
         print(f'time for one line: {(time.time()  - t)/(shape[1] * shape[2])}')
         
         
-        self.image_inv = dataset.image_inv.reshape(Nz,ny,nx)
+        self.image_inv = self.image_inv.reshape(Nz,ny,nx)
         self.image_inv = self.image_inv.transpose(0,2,1)
         
         self.clipped = False
@@ -338,6 +421,8 @@ class coherentSVIM_analysis:
             M = self.transform.matrix
             
         elif self.params['base'] == 'hadam':
+            self.ROI_s_z = get_h5_attr(self.file_path, 'ROI_s_z')[0]
+            self.params['had_pat_num'] = get_h5_attr(self.file_path, 'had_pat_num')[0]
             M = (1/self.params['had_pat_num'])*hadamard(int(self.params['had_pat_num']))
         
         nz,ny,nx = self.imageRaw.shape
@@ -382,12 +467,12 @@ class coherentSVIM_analysis:
                                     **dict(iter_lim=self.params['lsqr_niter'], damp=self.params['lsqr_damp'])
                                 )
         print(f'time for one line: {(time.time()  - t)/(shape[1] * shape[2])}')
-        
+        print(Nz,ny, nx)
         
         self.image_inv = self.image_inv.reshape(Nz,ny,nx)
         # self.image_inv = self.image_inv.transpose(0,2,1)
         
-        self.params['denoise_type': '1D']
+        self.params['denoise_type'] =  '3D'
         self.clipped = False
     
 
@@ -507,13 +592,10 @@ class coherentSVIM_analysis:
             if not os.path.exists(newpath):
                 os.makedirs(newpath)
             
-            index_key = 'single_volume_time_index'
-            label_key = 'save_label'
-            
-            if len(self.params[label_key]) >0:
-                fname = os.path.join(newpath, f'volume_{self.params[index_key]}_inverted_{self.params[label_key]}.h5')
+            if len(self.params["save_label"]) >0:
+                fname = os.path.join(newpath, f'volume_{self.params["single_volume_time_index"]}_inverted_{self.params["save_label"]}.h5')
             else:
-                fname = os.path.join(newpath, f'volume_{self.params[index_key]}_inverted.h5')
+                fname = os.path.join(newpath, f'volume_{self.params["single_volume_time_index"]}_inverted.h5')
             
             while os.path.exists(fname):
                 fname = fname[:-3] + '_bis.h5'
@@ -552,32 +634,41 @@ class coherentSVIM_analysis:
         if kwargs.get('progress_bar') is not None:
             progress_bar = kwargs.get('progress_bar')
             progress_bar.setValue(0)
-            
-        self.params['time_frames_n'] = get_h5_attr(self.file_path, 'time_frames_n')[0]
         
-        self.tl_stack = []
-        
-        for time_index in range(self.params['time_frames_n']):
+        try:
+            self.params['time_frames_n'] = get_h5_attr(self.file_path, 'time_frames_n')[0]
             
-            self.load_h5_file(time_index)
+        except:
+            print('>> Warning: Could not find the number of time frames.')
             
-            if self.select_ROI: self.setROI()
+        else:
+                
+            self.tl_stack = []
             
-            self.merge_pos_neg()
-            self.choose_freq() # also removes any duplicate in frequency
-                        
-            self.p_invert()
+            for time_index in range(self.params['time_frames_n']):
+                
+                self.load_h5_file(time_index)
+                
+                if self.select_ROI: self.setROI()
+                
+                self.merge_pos_neg()
+                self.choose_freq() # also removes any duplicate in frequency
+                            
+                self.p_invert()
+                
+                if self.params['time_lapse_mode'] == 'sum':
+                    self.tl_stack.append(np.sum(self.image_inv, self.params['time_lapse_view'])) # view z = 0, y = 1, x = 2
+                
+                elif self.params['time_lapse_view'] == 0:
+                    self.tl_stack.append(self.image_inv[self.params['time_lapse_plane'],:,:])
+                elif self.params['time_lapse_view'] == 1:
+                    self.tl_stack.append(self.image_inv[:, self.params['time_lapse_plane'],:])
+                elif self.params['time_lapse_view'] == 2:
+                    self.tl_stack.append(self.image_inv[:,:,self.params['time_lapse_plane']])
             
-            if self.params['time_lapse_mode'] == 'sum':
-                self.tl_stack.append(np.sum(self.image_inv, self.params['time_lapse_view'])) # view z = 0, y = 1, x = 2
-            elif self.params['time_lapse_view'] == 0:
-                self.tl_stack.append(self.image_inv[self.params['time_lapse_plane'],:,:])
-            elif self.params['time_lapse_view'] == 1:
-                self.tl_stack.append(self.image_inv[:, self.params['time_lapse_plane'],:])
-            elif self.params['time_lapse_view'] == 2:
-                self.tl_stack.append(self.image_inv[:,:,self.params['time_lapse_plane']])
-        
-        self.tl_stack = np.array(self.tl_stack)
+            self.tl_stack = np.array(self.tl_stack)
+       
+            
         
     def show_time_lapse(self):
             
@@ -598,14 +689,10 @@ class coherentSVIM_analysis:
             if not os.path.exists(newpath):
                 os.makedirs(newpath)
             
-            mode_key = 'time_lapse_mode'
-            
-            label_key = 'time_lapse_save_label'
-            
-            if len(self.params[label_key]) >0:
-                fname = os.path.join(newpath, f'time_lapse_inverted_{self.params[mode_key]}_{self.params[label_key]}.h5')
+            if len(self.params["time_lapse_save_label"]) >0:
+                fname = os.path.join(newpath, f'time_lapse_inverted_{self.params["time_lapse_mode"]}_{self.params["time_lapse_save_label"]}.h5')
             else:
-                fname = os.path.join(newpath, f'time_lapse_inverted_{self.params[mode_key]}.h5')
+                fname = os.path.join(newpath, f'time_lapse_inverted_{self.params["time_lapse_mode"]}.h5')
             
             while os.path.exists(fname):
                 fname = fname[:-3] + '_bis.h5'

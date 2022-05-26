@@ -12,7 +12,7 @@ import qtpy.QtCore
 import pyqtgraph as pg
 from get_h5_data import get_h5_dataset, get_h5_attr
 import h5py
-from analyser_transform_6090 import coherentSVIM_analysis
+from analyser_transform_6090 import coherentSVIM_analysis, show_image
 
 import numpy as np
 
@@ -39,13 +39,15 @@ class basic_app(coherentSVIM_analysis):
         
         # file path and load
         
-        self.file_path = '/Users/marcovitali/Documents/Poli/tesi/ScopeFoundy/coherentSVIM/data/220523_cuma_fluo_test/220523_110615_coherent_SVIM_diff_300ul_transp.h5'
+        self.file_path = '/Users/marcovitali/Documents/Poli/tesi/ScopeFoundy/coherentSVIM/data'
         self.ui.pushButton_file_browser.clicked.connect(self.file_browser)
         self.ui.pushButton_load_dataset.clicked.connect(self.load_file_path)
         
         self.params = {}
         
         # base selection
+        
+        self.ui.tabs.setCurrentWidget(self.ui.tab_coherent)
         
         self.bases = ['cos', 'sq', 'hadam']
         
@@ -150,7 +152,7 @@ class basic_app(coherentSVIM_analysis):
             self.params[key] = val
     
     def load_file_path(self):
-        super().__init__(self.new_file_path, self._gather_params())
+        super().__init__(self.new_file_path, **self._gather_params())
         self.ui.groupBox_invert_single_volume.setEnabled(True)
         self.ui.label_status.setText('Ready to invert')
         self.ui.pushButton_save_inverted.setEnabled(False)
@@ -167,11 +169,14 @@ class basic_app(coherentSVIM_analysis):
         self.ui.lineEdit_save_label_tl.setEnabled(False)
         self.ui.pushButton_show_time_lapse.setEnabled(False)
         
-        
-        if self.new_file_path.find('Hadamard') != -1:
+        if self.new_file_path.find('coherent_SVIM') != -1 and self.new_file_path.find('Hadamard') == -1 :
+            self.ui.tabs.setCurrentWidget(self.ui.tab_coherent)
+            self.ui.comboBox_base.setCurrentIndex(0)
+        elif self.new_file_path.find('Hadamard') != -1:
+            self.ui.tabs.setCurrentWidget(self.ui.tab_coherent)
             self.ui.comboBox_base.setCurrentIndex(2)
         elif self.new_file_path.find('DMD_light_sheet') != -1:
-            print('LIGHT_SHEET')
+            self.ui.tabs.setCurrentWidget(self.ui.tab_light_sheet)
         
         
         try:
@@ -270,26 +275,60 @@ class basic_app(coherentSVIM_analysis):
         self.update_params()
         
         dmdPx_to_sample_ratio = 1.247 # (um/px)
-        aspect_xz = (self.ROI_s_z * dmdPx_to_sample_ratio / self.image_inv.shape[0] )/0.65
+        # aspect_xz = (self.ROI_s_z * 1.247 / self.image_inv.shape[0] )/0.65
+        depth_z = (self.ROI_s_z * 1.247e-6 / self.image_inv.shape[0] )
         
         if self.params['plot_sum']:
             
             if self.params['plot_view'] == 0: #xy
-                image = np.sum(self.image_inv, 0)
+                # image = np.sum(self.image_inv, 0)
+                
+                title= f"Inverted image XY SUM (base: {self.params['base']})"
+                
+                show_image(np.sum(self.image_inv, 0), title= title, ordinate = 'X', ascisse = 'Y', 
+                           scale_ord = 0.65e-6, scale_asc = 0.65e-6)  
+                
+                
             elif self.params['plot_view'] == 1: #xz
-                image = np.repeat(np.sum(self.image_inv, 2).transpose(), aspect_xz, 1)
+                # image = np.repeat(np.sum(self.image_inv, 2).transpose(), aspect_xz, 1)
+                title= f"Inverted image XZ SUM (base: {self.params['base']})"
+                
+                show_image(np.sum(self.image_inv, 2).transpose(), title= title, ordinate = 'X', ascisse = 'Z', 
+                           scale_ord = 0.65e-6, scale_asc = depth_z )  
+                
+                
             elif self.params['plot_view'] == 2: #yz
-                image = np.repeat(np.sum(self.image_inv, 1), aspect_xz, 0)
+                # image = np.repeat(np.sum(self.image_inv, 1), aspect_xz, 0)
+                
+                title= f"Inverted image YZ SUM (base: {self.params['base']})"
+                
+                show_image(np.sum(self.image_inv, 1), title= title, ordinate = 'Z', ascisse = 'Y', 
+                           scale_ord = depth_z, scale_asc = 0.65e-6 )  
+                
         else:
             
-            if self.params['plot_view'] == 0:
-                image = self.image_inv
-            elif self.params['plot_view'] == 1:
-                image= np.repeat(self.image_inv.transpose(2,1,0), aspect_xz, 2)
-            elif self.params['plot_view'] == 2:
-                image = np.repeat(self.image_inv.transpose(1,0,2), aspect_xz, 1)
+            if self.params['plot_view'] == 0: #xy
+                # image = self.image_inv
+                title= f"Inverted image XY (base: {self.params['base']})"
                 
-        pg.image(image, title= f"Inverted image (base: {self.params['base']})")      
+                show_image(self.image_inv, title= title, ordinate = 'X', ascisse = 'Y', 
+                           scale_ord = 0.65e-6, scale_asc = 0.65e-6)  
+                
+            elif self.params['plot_view'] == 1: #xz
+                # image= np.repeat(self.image_inv.transpose(2,1,0), aspect_xz, 2)
+                title= f"Inverted image XZ (base: {self.params['base']})"
+                
+                show_image(self.image_inv.transpose(2,1,0), title= title, ordinate = 'X', ascisse = 'Z', 
+                           scale_ord = 0.65e-6, scale_asc = depth_z )  
+                
+            elif self.params['plot_view'] == 2: #yz
+                # image = np.repeat(self.image_inv.transpose(1,0,2), aspect_xz, 1)
+                title= f"Inverted image YZ (base: {self.params['base']})"
+                
+                show_image(self.image_inv.transpose(1,0,2), title= title, ordinate = 'Z', ascisse = 'Y', 
+                           scale_ord = depth_z, scale_asc = 0.65e-6 ) 
+                
+        # show_image(image, title)      
     
         
     def invert_tl_app(self):
