@@ -28,7 +28,7 @@ import pyqtgraph as pg
 import qtpy.QtCore
 from qtpy.QtWidgets import QApplication
 
-
+from show_image import show_image
 
 def time_it(method):
     """Fucntion decorator to time a methos""" 
@@ -43,85 +43,6 @@ def time_it(method):
     return inner
 
 
-images = []
-plots = []
-QAPP = None
-
-def show_image(image,  **kwargs):
-    
-    
-    show_params = {'ordinate': 'X',
-                   'ascisse' : 'Y',
-                   'scale_ord' : 1,
-                   'scale_asc' : 1}
-    
-    
-    for key, val in kwargs.items():
-        show_params[key] = val
-    
-    
-    app = pg.mkQApp()
-    plot = pg.PlotItem()
-    
-    ordinate_text = f'<strong style="font-size: 20px;">{show_params["ordinate"]} axis</strong>'
-    ascisse_text = f'<strong style="font-size: 20px;">{show_params["ascisse"]} axis</strong>'
-    plot.setLabel(axis='left', text= ascisse_text,  units = 'm')
-    plot.setLabel(axis='bottom', text=  ordinate_text, units = 'm')
-    
-    
-    w = pg.ImageView(view = plot)
-    img = w.getImageItem()
-    tlabel = pg.InfLineLabel(w.timeLine, text="{value:.0f}")
-    
-    windowTitle = kwargs.pop("title", "ImageView")
-    w.setWindowTitle(windowTitle)
-    w.setImage(image, scale = (show_params["scale_ord"], show_params["scale_asc"]), pos = (0, 0))
-    images.append(w)
-    w.show()
-    
-    
-    def imageHoverEvent(event):
-        """Show the position, pixel, and value under the mouse cursor.
-        """
-        if event.isExit():
-            plot.setTitle("")
-            return
-        pos = event.pos()
-        i, j  = pos.y(), pos.x()
-        time_index = w.currentIndex
-        # print(dir(pos))
-        
-        if len(image.shape) == 2:
-        
-            # i = int(np.clip(i, 0, image.shape[0] - 1))
-            # j = int(np.clip(j, 0, image.shape[1] - 1))
-            # val = image[i, j]
-            # print(val)
-            ppos = img.mapToParent(pos)
-            x, y = ppos.x(), ppos.y()
-            
-        else:
-            
-            # i = int(np.clip(i, 0, image.shape[1] - 1))
-            # j = int(np.clip(j, 0, image.shape[2] - 1))
-            # val = image[time_index ,i, j]
-            # print(val)
-            ppos = img.mapToParent(pos)
-            x, y = ppos.x(), ppos.y()
-            
-        plot.setTitle("pos: (%.1f, %.1f)um  -- pixel: (%d, %d, %d)" % (x*1e6, y*1e6, time_index, i, j), font = 15)
-        
-        # plot.setTitle("value: %d" % ( val))
-
-    # Monkey-patch the image to use our custom hover function. 
-    # This is generally discouraged (you should subclass ImageItem instead),
-    # but it works for a very simple use like this. 
-    img.hoverEvent = imageHoverEvent
-    
-    
-    return w
-
-
 class DMD_light_sheet_analysis:
     
     name = 'DMD_light_sheet_analysis'
@@ -131,10 +52,10 @@ class DMD_light_sheet_analysis:
         #default values
         self.params = {'select_ROI': False,
                        'denoise' : False,
-                       'X0': 0,
-                       'Y0': 0,
-                       'delta_x' : 0,
-                       'delta_y' : 0,
+                       'X0': 1024,
+                       'Y0': 1024,
+                       'delta_x' : 100,
+                       'delta_y' : 100,
                        'mu': 0.01,
                        'lamda': 0.5,
                        'niter_out': 15,
@@ -153,17 +74,19 @@ class DMD_light_sheet_analysis:
             self.params[key] = val
         
         self.file_path  = fname
+        self.denoised = False
         
         
     @time_it   
     def load_h5_file(self, dataset_index = 0):
         
-        self.imageRaw = get_h5_dataset(self.file_path, max(0,dataset_index)) 
-
+        self.image = get_h5_dataset(self.file_path, max(0,dataset_index))
+        self.ROI_s_z = get_h5_attr(self.file_path, 'ROI_s_z')[0]
+        self.denoised = False
     
     def show_im_raw(self):
                 
-        show_image(self.imageRaw.transpose(0,1,2), title="Raw image", ordinate = 'X', ascisse = 'Y', 
+        show_image(self.image.transpose(0,1,2), title="Raw image", ordinate = 'X', ascisse = 'Y', 
                    scale_ord = 0.65e-6, scale_asc = 0.65e-6)    
         
         if self.name == 'DMD_light_sheet_analysis':
@@ -181,7 +104,7 @@ class DMD_light_sheet_analysis:
         
         ax1=fig1.add_subplot(111)
         fig1.suptitle('Raw image uniform illumination')
-        xy = ax1.imshow(self.imageRaw[0,:,:].transpose(), cmap = 'gray', aspect = 1, interpolation = 'none') 
+        xy = ax1.imshow(self.image[0,:,:].transpose(), cmap = 'gray', aspect = 1, interpolation = 'none') 
         ax1.set_xlabel('x (px)')
         ax1.set_ylabel('y (px)')
         cbar = fig1.colorbar(xy, ax = ax1, shrink=1, format='%.0e')
@@ -195,26 +118,27 @@ class DMD_light_sheet_analysis:
         for key, val in kwargs.items():
             self.params[key] = val
         
-        self.imageRaw = self.imageRaw[:,
+        self.image = self.image[:,
                                       self.params['X0'] : self.params['X0'] + self.params['delta_x'],
                                       self.params['Y0'] : self.params['Y0'] + self.params['delta_y']]
     
     
     @time_it
-    def invert_and_denoise1D_no_for(self, **kwargs):
+    def denoise1D(self, **kwargs):
         
+        self.params['image_shape'] = self.image.shape
 
-        Iop = pylops.Identity(self.imageRaw.shape)
-        Dop = pylops.FirstDerivative(np.prod(self.imageRaw.shape), self.imageRaw.shape,  0, edge=True, kind="backward")
+        Iop = pylops.Identity(np.prod(self.params['image_shape']))
+        Dop = pylops.FirstDerivative(np.prod(self.params['image_shape']), self.params['image_shape'],  0, edge=True, kind="backward")
         
         self.params['denoise_type'] =  '1D'
         
         # t = time.time()
         
-        self.image_denoised, _ = pylops.optimization.sparsity.SplitBregman(
+        self.image, _ = pylops.optimization.sparsity.SplitBregman(
                                     Iop,
                                     [Dop],
-                                    self.imageRaw.ravel(),
+                                    self.image.ravel(),
                                     self.params['niter_out'],
                                     self.params['niter_in'],
                                     mu = self.params['mu'],
@@ -226,37 +150,38 @@ class DMD_light_sheet_analysis:
         # print(f'time for one line: {(time.time()  - t)/(shape[1] * shape[2])}')
         
         
-        self.image_denoised = self.image_denoised.reshape(self.imageRaw.shape)
-        self.image_denoised = self.image_denoised.transpose(0,2,1)
+        self.image = self.image.reshape(self.params['image_shape'])
+        self.image = self.image.transpose(0,2,1)
         
+        self.denoised = True
         self.clipped = False
         
     
     @time_it
-    def invert_and_denoise3D_v2(self, **kwargs):
+    def denoise3D(self, **kwargs):
         
         # update any specified parameter
         for key, val in kwargs.items():
             self.params[key] = val
         
    
-
+        self.params['image_shape'] = self.image.shape
         
-        Iop = pylops.Identity(self.imageRaw.shape)
+        Iop = pylops.Identity(np.prod(self.params['image_shape']))
         
         Dop = [
-            pylops.FirstDerivative(np.prod(self.imageRaw.shape), self.imageRaw.shape,  0, edge=True, kind="backward"),
-            pylops.FirstDerivative(np.prod(self.imageRaw.shape), self.imageRaw.shape,  1, edge=True, kind="backward"),
-            pylops.FirstDerivative(np.prod(self.imageRaw.shape), self.imageRaw.shape,  2, edge=True, kind="backward")
+            pylops.FirstDerivative(np.prod(self.params['image_shape']), self.params['image_shape'],  0, edge=True, kind="backward"),
+            pylops.FirstDerivative(np.prod(self.params['image_shape']), self.params['image_shape'],  1, edge=True, kind="backward"),
+            pylops.FirstDerivative(np.prod(self.params['image_shape']), self.params['image_shape'],  2, edge=True, kind="backward")
         ]
         
         
         # t = time.time()
         
-        self.image_denoised, _ = pylops.optimization.sparsity.SplitBregman(
+        self.image, _ = pylops.optimization.sparsity.SplitBregman(
                                     Iop,
                                     Dop,
-                                    self.imageRaw.ravel(),
+                                    self.image.ravel(),
                                     self.params['niter_out'],
                                     self.params['niter_in'],
                                     mu = self.params['mu'],
@@ -268,9 +193,10 @@ class DMD_light_sheet_analysis:
         # print(f'time for one line: {(time.time()  - t)/(shape[1] * shape[2])}')
         # print(Nz,ny, nx)
         
-        self.image_denoised = self.image_denoised.reshape(self.imageRaw.shape)
-        # self.image_denoised = self.image_denoised.transpose(0,2,1)
+        self.image = self.image.reshape(self.params['image_shape'])
+        # self.image = self.image.transpose(0,2,1)
         
+        self.denoised = True
         self.params['denoise_type'] =  '3D'
         self.clipped = False
     
@@ -281,16 +207,16 @@ class DMD_light_sheet_analysis:
     @time_it
     def cut_negatives(self):
         
-        self.image_denoised = self.image_denoised.clip(min = 0)
+        self.image = self.image.clip(min = 0)
         self.clipped = True
     
     
     
     @time_it
-    def show_inverted_proj(self):
+    def show_proj(self):
         
-        inverted_xy = np.sum(self.image_denoised, 0)
-        inverted_xz = np.sum(self.image_denoised, 2)
+        inverted_xy = np.sum(self.image, 0)
+        inverted_xz = np.sum(self.image, 2)
         
         c_min = min( np.amin(np.amin(inverted_xy, 1), 0) , np.amin(np.amin(inverted_xz, 1), 0) )
         c_max = max(np.amax(np.amax(inverted_xy, 1), 0) , np.amax(np.amax(inverted_xz, 1), 0) )
@@ -312,12 +238,12 @@ class DMD_light_sheet_analysis:
         # fig1.colorbar(xz, ax = ax1)
         
     @time_it    
-    def show_inverted_xy(self, plane = 'sum'):
+    def show_xy(self, plane = 'sum'):
         
         if plane == 'sum':
-            inverted_xy = np.sum(self.image_denoised, 0)
+            inverted_xy = np.sum(self.image, 0)
         else:
-            inverted_xy = self.image_denoised[plane,:,:] # to show just one xy plane
+            inverted_xy = self.image[plane,:,:] # to show just one xy plane
         
         fig1=plt.figure()
         fig1.clf()
@@ -330,19 +256,19 @@ class DMD_light_sheet_analysis:
         cbar.ax.set_ylabel('Counts', rotation=270)
     
     @time_it
-    def show_inverted_xz(self, plane = 'sum', **kwargs):
+    def show_xz(self, plane = 'sum', **kwargs):
         
         # if kwargs is not None:
         #     for key, value in kwargs.items():
         #         print( key, '==>', value)
         
         if plane == 'sum':
-            inverted_xz = np.sum(self.image_denoised, 2)
+            inverted_xz = np.sum(self.image, 2)
         else:
-            inverted_xz = self.image_denoised[:,:,plane] # to show just one xz plane
+            inverted_xz = self.image[:,:,plane] # to show just one xz plane
         
         dmdPx_to_sample_ratio = 1.247 # (um/px)
-        aspect_xz = (self.ROI_s_z * dmdPx_to_sample_ratio / self.image_denoised.shape[0] )/0.65
+        aspect_xz = (self.ROI_s_z * dmdPx_to_sample_ratio / self.image.shape[0] )/0.65
         
         # aspect_xz = 0.5
         
@@ -372,7 +298,11 @@ class DMD_light_sheet_analysis:
     
 
     # @time_it
-    def save_denoised(self):
+    def save_volume(self):
+        
+        if self.denoised == False:
+            print('>> WARNING: no denoise has been applied before saving this volume')
+        
         
         try:
             head, tail = os.path.split(self.file_path)
@@ -399,14 +329,14 @@ class DMD_light_sheet_analysis:
      
             # create a dataset
             name = 't000/c000/' + tail[:-3]
-            h5dataset = parent.create_dataset(name = name, shape=self.image_denoised.shape, data = self.image_denoised)
+            h5dataset = parent.create_dataset(name = name, shape=self.image.shape, data = self.image)
             h5dataset.dims[0].label = "z"
             h5dataset.dims[1].label = "y"
             h5dataset.dims[2].label = "x"
             
             self.ROI_s_z = get_h5_attr(self.file_path, 'ROI_s_z')[0]
             dmdPx_to_sample_ratio = 1.247 # (um/px)
-            z_sample_period = self.ROI_s_z * dmdPx_to_sample_ratio / self.image_denoised.shape[0] 
+            z_sample_period = self.ROI_s_z * dmdPx_to_sample_ratio / self.image.shape[0] 
             h5dataset.attrs['element_size_um'] =  [z_sample_period,0.65,0.65]
 
 
@@ -442,14 +372,14 @@ class DMD_light_sheet_analysis:
                 
                 
                 if self.params['time_lapse_mode'] == 'sum':
-                    self.tl_stack.append(np.sum(self.image_denoised, self.params['time_lapse_view'])) # view z = 0, y = 1, x = 2
+                    self.tl_stack.append(np.sum(self.image, self.params['time_lapse_view'])) # view z = 0, y = 1, x = 2
                 
                 elif self.params['time_lapse_view'] == 0:
-                    self.tl_stack.append(self.image_denoised[self.params['time_lapse_plane'],:,:])
+                    self.tl_stack.append(self.image[self.params['time_lapse_plane'],:,:])
                 elif self.params['time_lapse_view'] == 1:
-                    self.tl_stack.append(self.image_denoised[:, self.params['time_lapse_plane'],:])
+                    self.tl_stack.append(self.image[:, self.params['time_lapse_plane'],:])
                 elif self.params['time_lapse_view'] == 2:
-                    self.tl_stack.append(self.image_denoised[:,:,self.params['time_lapse_plane']])
+                    self.tl_stack.append(self.image[:,:,self.params['time_lapse_plane']])
             
             self.tl_stack = np.array(self.tl_stack)
        
@@ -457,7 +387,7 @@ class DMD_light_sheet_analysis:
         
     def show_time_lapse(self):
             
-        pg.image(self.tl_stack, title= f"Inverted Time Lapse (base: {self.params['base']})")        
+        pg.image(self.tl_stack, title= f"Time Lapse (base: {self.params['base']})")        
         
         if self.name == 'DMD_light_sheet_analysis':
             #keeps the window open running a QT application
@@ -475,9 +405,9 @@ class DMD_light_sheet_analysis:
                 os.makedirs(newpath)
             
             if len(self.params["time_lapse_save_label"]) >0:
-                fname = os.path.join(newpath, f'time_lapse_inverted_{self.params["time_lapse_mode"]}_{self.params["time_lapse_save_label"]}.h5')
+                fname = os.path.join(newpath, f'time_lapse_{self.params["time_lapse_mode"]}_{self.params["time_lapse_save_label"]}.h5')
             else:
-                fname = os.path.join(newpath, f'time_lapse_inverted_{self.params["time_lapse_mode"]}.h5')
+                fname = os.path.join(newpath, f'time_lapse_{self.params["time_lapse_mode"]}.h5')
             
             while os.path.exists(fname):
                 fname = fname[:-3] + '_bis.h5'
@@ -492,7 +422,7 @@ class DMD_light_sheet_analysis:
      
             # create a dataset
             name = 't000/c000/' + tail[:-3]
-            h5dataset = parent.create_dataset(name = name, shape=self.image_denoised.shape, data = self.image_denoised)
+            h5dataset = parent.create_dataset(name = name, shape=self.image.shape, data = self.image)
             h5dataset.dims[0].label = "t"
             h5dataset.dims[1].label = "y"
             h5dataset.dims[2].label = "x"
@@ -510,12 +440,26 @@ if __name__ == "__main__" :
     
 
         
-        file_name = '/Users/marcovitali/Documents/Poli/tesi/ScopeFoundy/coherentSVIM/data/220523_cuma_fluo_test/220523_113202_coherent_SVIM_no_diff_300ul_transp.h5'
-        
+        # file_name = '/Users/marcovitali/Documents/Poli/tesi/ScopeFoundy/coherentSVIM/data/220523_cuma_fluo_test/220523_113501_DMD_light_sheet_no_diff_300ul_transp_6px_posneg_ANALYSED/volume_0_inverted_only_POS.h5'
+        file_name = '/Users/marcovitali/Documents/Poli/tesi/ScopeFoundy/coherentSVIM/data/220518_ls_tests/220518_153102_DMD_light_sheet_sample1_diff_ls_round2_5px.h5'
         
         dataset = DMD_light_sheet_analysis(file_name)
         dataset.load_h5_file()
         
         
+        # dataset.setROI()
+        
+        dataset.show_im_raw()
+        # dataset.denoise3D()
+        
+        #%%
+        
+        show_image(dataset.image, title = 'denoised', ordinate = 'X', ascisse = 'Y', 
+                   scale_ord = 0.65e-6, scale_asc = 0.65e-6)
+    
+        #keeps the window open running a QT application
+        if sys.flags.interactive != 1 or not hasattr(qtpy.QtCore, 'PYQT_VERSION'):
+            QApplication.exec_()
+        sys.exit ( "End of test")
             
         

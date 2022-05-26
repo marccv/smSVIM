@@ -32,6 +32,8 @@ import qtpy.QtCore
 from qtpy.QtWidgets import QApplication
 
 
+from show_image import show_image
+
 
 def time_it(method):
     """Fucntion decorator to time a methos""" 
@@ -44,85 +46,6 @@ def time_it(method):
         print(f'Execution time for method "{method.__name__}": {end_time-start_time:.6f} s \n') 
         return result        
     return inner
-
-
-images = []
-plots = []
-QAPP = None
-
-def show_image(image,  **kwargs):
-    
-    
-    show_params = {'ordinate': 'X',
-                   'ascisse' : 'Y',
-                   'scale_ord' : 1,
-                   'scale_asc' : 1}
-    
-    
-    for key, val in kwargs.items():
-        show_params[key] = val
-    
-    
-    app = pg.mkQApp()
-    plot = pg.PlotItem()
-    
-    ordinate_text = f'<strong style="font-size: 20px;">{show_params["ordinate"]} axis</strong>'
-    ascisse_text = f'<strong style="font-size: 20px;">{show_params["ascisse"]} axis</strong>'
-    plot.setLabel(axis='left', text= ascisse_text,  units = 'm')
-    plot.setLabel(axis='bottom', text=  ordinate_text, units = 'm')
-    
-    
-    w = pg.ImageView(view = plot)
-    img = w.getImageItem()
-    tlabel = pg.InfLineLabel(w.timeLine, text="{value:.0f}")
-    
-    windowTitle = kwargs.pop("title", "ImageView")
-    w.setWindowTitle(windowTitle)
-    w.setImage(image, scale = (show_params["scale_ord"], show_params["scale_asc"]), pos = (0, 0))
-    images.append(w)
-    w.show()
-    
-    
-    def imageHoverEvent(event):
-        """Show the position, pixel, and value under the mouse cursor.
-        """
-        if event.isExit():
-            plot.setTitle("")
-            return
-        pos = event.pos()
-        i, j  = pos.y(), pos.x()
-        time_index = w.currentIndex
-        # print(dir(pos))
-        
-        if len(image.shape) == 2:
-        
-            # i = int(np.clip(i, 0, image.shape[0] - 1))
-            # j = int(np.clip(j, 0, image.shape[1] - 1))
-            # val = image[i, j]
-            # print(val)
-            ppos = img.mapToParent(pos)
-            x, y = ppos.x(), ppos.y()
-            
-        else:
-            
-            # i = int(np.clip(i, 0, image.shape[1] - 1))
-            # j = int(np.clip(j, 0, image.shape[2] - 1))
-            # val = image[time_index ,i, j]
-            # print(val)
-            ppos = img.mapToParent(pos)
-            x, y = ppos.x(), ppos.y()
-            
-        plot.setTitle("pos: (%.1f, %.1f)um  -- pixel: (%d, %d, %d)" % (x*1e6, y*1e6, time_index, i, j), font = 15)
-        
-        # plot.setTitle("value: %d" % ( val))
-
-    # Monkey-patch the image to use our custom hover function. 
-    # This is generally discouraged (you should subclass ImageItem instead),
-    # but it works for a very simple use like this. 
-    img.hoverEvent = imageHoverEvent
-    
-    
-    return w
 
 
 class coherentSVIM_analysis:

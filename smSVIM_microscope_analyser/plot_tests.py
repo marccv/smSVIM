@@ -19,7 +19,6 @@ import sys
 import os
 import h5py
 import pyqtgraph as pg
-import qtpy.QtCore
 from qtpy.QtWidgets import QApplication
 
 import numpy as np
