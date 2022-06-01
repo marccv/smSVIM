@@ -1,4 +1,9 @@
-""" 
+# -*- coding: utf-8 -*-
+"""
+Created on Tue May 24 15:54:03 2022
+
+@author: SPIM-OPT
+ 
    Written by Michele Castriotta, Alessandro Zecchi, Andrea Bassi (Polimi).
    Code for creating the measurement class of ScopeFoundry for the Orca Flash 4V3
    11/18
@@ -9,39 +14,15 @@ from ScopeFoundry.helper_funcs import sibling_path, load_qt_ui_file
 from ScopeFoundry import h5_io
 import pyqtgraph as pg
 import numpy as np
+from scipy.linalg import hadamard
 import os
 import time
         
 
 
 
-def create_squared_pattern_from_freq(num_of_periods = 1, transpose_pattern=False, cropped_field_size = [270, 810],
-                           centered = True, phase = 0.0, im_size = [1080, 1920]):
-    """    
-    We have to generate a square wave of given period with inclination of 45° over
-    a frame of dimensions 1080x1920
-    
-    Each square pixel has border length s_pixel = 7.56 um
-    The unit period is period_unit = sqrt(2)*s_pixel = 10.7 um
-    
-    OUTPUTS:
-        - image             : 8bit image (numpy.uint8 array) with the desired pattern
-        - displayed_per_num : (float) Actual number of periods displayed in the ROI rectangle
-    
-    PARAMETERS:
-        - num_of_periods    : number of periods in the cropped ROI width
-        - transpose_pattern : FASLE -> antiDIAG, TRUE -> DIAG
-        - centered          : TRUE -> set the origin of the square wave to the center of the
-                              cropped rectangle. FALSE -> the origin will be the upper left
-                              corner of the cropped rectangle
-        - phase             : offset phase expressed as a fraction of the period (0.5 -> 180deg)
-        - cropped_field_size: dimentions of the rectangle ROI. First dimention refers to the border
-                              parallel to the diagonal direction and the second to the border parallel to the
-                              anti-diagonal direction. Default is [270,810] to have the largest rectangle with
-                              borders proportioned 3:1
-        - im_size           : Size of the outpun image in pizel; default is [1080,1920]
-        
-    """
+def create_hadamard_patterns(num_of_patterns = 32, transpose_pattern=False, cropped_field_size = [256, 512],
+                             im_size = [1080, 1920]):
     
     s_y = im_size[0]
     s_x = im_size[1]
@@ -50,69 +31,63 @@ def create_squared_pattern_from_freq(num_of_periods = 1, transpose_pattern=False
     s_diag = cropped_field_size[0] #dimension of the border parallel to the diagonal direction
     s_anti = cropped_field_size[1] #dimension of the border parallel to the antidiagonal direction  
 
-
+    H = hadamard(num_of_patterns)
+    H[H<0] = 0 # the DMD only accepts 0 and 1, so to create the real pattern I will have to operate in PosNeg mode
     
-    
-    # uniform illumination
-    if num_of_periods == 0:
-        return np.ones(im_size, dtype = 'uint8'), 0
-    
-
-
-    image = np.zeros(im_size, dtype = 'uint8')
-    # image = np.zeros(size, dtype = 'bool')
+    images = []
     
     if not transpose_pattern:
+        #antidiag
         
-        # antidiag
+        repetitions = s_diag/num_of_patterns * 2
         
-        # t = time.time()
-        
-        period = int(s_diag/num_of_periods)
-        disp_per_num = s_diag/period
-        
-        shift =  (s_y + s_x)/2  - (not centered)*(int(period/2) + s_diag) + int(2*period*phase)
-        
-        # I create the single strip to shift
-        
-        x_coord = np.linspace(-shift, (s_x + s_y - shift -1), s_x + s_y)
-        strip = np.uint8(( x_coord%(2*period) < period)*1)
-        # strip = ( x_coord%(2*period) < period)
-        
-        # I move the squarewave strip to create the 45deg angle
-         
-        for i in range(s_y):
-            image[i, :] = strip[(s_y-i-1):(s_y + s_x -i-1)]
-             
+        for i in range(num_of_patterns):
             
-        # print(f'Time for creation of uncropped image: {time.time() - t}')
-    
-    else:    
-        # transpose but we still use the same periods that are generated along z without transposing
-        # diag
-        
-        # t = time.time()
-        
-        period = int(s_diag/num_of_periods)  # NOTE Here we originally had s_anti as paramenter, but to create patterns with the same period as when Transpose = False we put s_diag (<-> s_z)
-        disp_per_num = s_diag/period
-        
-        shift = (s_y + s_x)/2  - (not centered)*(int(period/2)  + s_anti)  + int(2*period*phase)
-        
-        x_coord = np.linspace(-shift, (s_x + s_y - shift -1), s_x + s_y)
-        strip = np.uint8(( x_coord%(2*period) < period)*1)
-        # strip = ( x_coord%(2*period) < period)
-        
-        for i in range(s_y):
-            image[i, :] = strip[(i):( s_x +i)]
+            image = np.zeros(im_size, dtype = 'uint8')
             
+            strip = np.uint8(np.repeat(H[i], repetitions).reshape(1,s_diag*2).copy())
             
-        # print(f'Time for creation of uncropped image: {time.time() - t}')    
-                        
-    return image, disp_per_num
+            pad_len = s_y + 0.5*(s_x - s_y - s_diag*2)
+            padding = np.zeros([1,int(pad_len)])
+            
+            strip = np.concatenate((padding, strip, padding), axis = 1)
+            
+            # print(strip)
+            
+            for j in range(s_y):
+                image[j, :] = strip[0, (s_y-j-1):(s_y + s_x -j-1)]
+                
+            images.append(image)
+    else:
+        #transpose: diag
+        repetitions = s_anti/num_of_patterns * 2
+        
+        for i in range(num_of_patterns):
+            
+            image = np.zeros(im_size, dtype = 'uint8')
+            
+            strip = np.uint8(np.repeat(H[i], repetitions).reshape(1,s_anti * 2).copy())
+            
+            pad_len = s_y + 0.5*(s_x - s_y - s_anti * 2)
+            padding = np.zeros([1,int(pad_len)])
+            
+            strip = np.concatenate((padding, strip, padding), axis = 1)
+            
+            # print(strip)
+            
+            for j in range(s_y):
+                image[j, :] = strip[0, j :( s_x +j)]
+                
+            images.append(image)
+        
+            
+    return images
 
 
 
-def create_rectangle_mask(cropped_field_size = [270, 810], im_size = [1080, 1920]):
+
+
+def create_rectangle_mask(cropped_field_size = [256, 512], im_size = [1080, 1920]):
     
     """
     cropped_field_size: dimentions of the rectangle ROI. First dimention refers to the border
@@ -148,9 +123,9 @@ def create_rectangle_mask(cropped_field_size = [270, 810], im_size = [1080, 1920
 
 
 
-class coherentSvimMeasurement(Measurement):     
+class coherentSvim_Hadamard_Measurement(Measurement):     
     
-    name = "coherent_SVIM"
+    name = "coherentSvim_Hadamard"
     
     
     def calculate_time_frames_n(self):
@@ -158,75 +133,34 @@ class coherentSvimMeasurement(Measurement):
         if not self.settings['time_lapse']:
             return int(1)
         else:
-            delay = 0.54# 0.3s is the trigger dead time we set, 0.24 is an empirical dead computational time
-            return int(np.ceil( self.settings['obs_time'] / ( (self.settings['num_frames']/self.settings['effective_fps']) + self.settings['dark_time'] + delay ) ))  
+            # 0.3s is the trigger dead time we set, 0.24 is an empirical dead computational time
+            return int(np.ceil(    self.settings['obs_time'] / ( (self.settings['num_frames']/self.settings['effective_fps']) + self.settings['dark_time'] + 0.3 + 0.24 )    ))  
      
     
-    def calculate_freq(self, f_min, f_max, ROI_s):
+    def set_had_pat_num(self, had_pat_num):
         
-        freqs = np.linspace(f_min, f_max, int(2*(f_max - f_min) + 1),dtype = float)
-                
-        if f_min == 0.0:
-            disp_freqs = [0]
-            for freq in freqs[1:]:
-                period = int(ROI_s/freq)
-                disp_freqs.append(ROI_s/period)
-        else:
-            disp_freqs = []
-            for freq in freqs:
-                period = int(ROI_s/freq)
-                disp_freqs.append(ROI_s/period)
-                
-        mask = np.append(np.diff(disp_freqs)!= 0, True)
-        return np.array(freqs)[mask]
-    
-    def set_f_min(self,f_min):
-        
-        if (f_min*10)%5 != 0:
-            f_min = round(f_min*2)/2
-            self.settings['f_min'] = f_min
-        elif f_min >  self.settings['f_max']:
-            self.settings['f_min'] = self.settings['f_max']
-        
-        elif hasattr(self, 'num_frames'):
-            self.freqs = self.calculate_freq(f_min, self.settings['f_max'], self.settings['ROI_s_z'] )     
-            self.settings['num_frames']  = (1 + self.settings['PosNeg']) * len(self.freqs)
-        
-            if hasattr(self, 'time_frames_n'):
-                self.settings['time_frames_n'] = self.calculate_time_frames_n()
+        if np.log2(had_pat_num)%1 != 0:
+            exp = np.ceil(np.log2(had_pat_num))
+            self.settings['had_pat_num'] = int(2**exp)
             
-    def set_f_max(self,f_max):
+        else:
+            self.settings['num_frames']  =(1 + self.settings['PosNeg']) * had_pat_num
+            
         
-        if (f_max*10)%5 != 0:
-            f_max = round(f_max*2)/2
-            self.settings['f_max'] = f_max
-        elif f_max <  self.settings['f_min']:
-            self.settings['f_max'] = self.settings['f_min']
-        
-        elif hasattr(self, 'num_frames'):
-            self.freqs = self.calculate_freq(self.settings['f_min'], f_max, self.settings['ROI_s_z'] )     
-            self.settings['num_frames']  = (1 + self.settings['PosNeg']) * len(self.freqs)
-     
-            if hasattr(self, 'time_frames_n'):
-                self.settings['time_frames_n'] = self.calculate_time_frames_n()
                 
     def set_PosNeg(self, PosNeg):
         
         if hasattr(self, 'num_frames'):
-            if hasattr(self, 'freqs'):
-                self.settings['num_frames']  =(1 + PosNeg) * (len(self.freqs))
-            else:
-                self.freqs = self.calculate_freq(self.settings['f_min'], self.settings['f_max'], self.settings['ROI_s_z'] )
-                self.settings['num_frames']  =(1 + PosNeg) * (len(self.freqs))
-                
+            
+            self.settings['num_frames']  =(1 + PosNeg) * self.settings['had_pat_num']
+              
             if hasattr(self, 'time_frames_n'):
                     self.settings['time_frames_n'] = self.calculate_time_frames_n()
                 
     def set_ROI_s_z(self, ROI_s_z):
         
         if hasattr(self, 'num_frames'):
-            self.freqs = self.calculate_freq(self.settings['f_min'], self.settings['f_max'], ROI_s_z )    
-            self.settings['num_frames']  =(1 + self.settings['PosNeg']) * len(self.freqs)
+            self.settings['num_frames']  =(1 + self.settings['PosNeg']) *  self.settings['had_pat_num']
             
             if hasattr(self, 'time_frames_n'):
                 self.settings['time_frames_n'] = self.calculate_time_frames_n()
@@ -299,12 +233,11 @@ class coherentSvimMeasurement(Measurement):
         self.settings.New('auto_levels', dtype=bool, initial=True )
         self.settings.New('level_min', dtype=int, initial=60 )
         self.settings.New('level_max', dtype=int, initial=150 )
-        self.f_min = self.settings.New('f_min', dtype=float, initial=0.0, spinbox_step= 0.5 , spinbox_decimals= 1, vmin = 0)
-        self.f_max = self.settings.New('f_max', dtype=float, initial=30.0 , spinbox_step= 0.5, spinbox_decimals=1, vmin = 0)
+        self.had_pat_num = self.settings.New('had_pat_num', dtype=int, initial=32 , vmin = 1 )
         self.PosNeg = self.settings.New('PosNeg', dtype = bool, initial = True)
-        self.num_frames = self.settings.New('num_frames',ro = True, dtype = int, initial = 70)    # TODO The initial value of this setting is critical: so far it must be updated manually if one changes any other initial value. Should we calculate self.freqs during the setup period and put here initial = len(self.freqs)?
-        self.ROI_s_z = self.settings.New('ROI_s_z', dtype=int, initial=200, unit = 'px' )
-        self.settings.New('ROI_s_y', dtype=int, initial=600, unit = 'px' )
+        self.num_frames = self.settings.New('num_frames',ro = True, dtype = int, initial = 64)    # TODO The initial value of this setting is critical: so far it must be updated manually if one changes any other initial value. Should we calculate self.freqs during the setup period and put here initial = len(self.freqs)?
+        self.ROI_s_z = self.settings.New('ROI_s_z', dtype=int, initial=256, unit = 'px' )
+        self.settings.New('ROI_s_y', dtype=int, initial=512, unit = 'px' )
         self.settings.New('transpose_pattern', dtype=bool, initial=False )
         self.exposure = self.settings.New("exposure", dtype = float, initial=100, vmin=1.004, vmax = 1e4, spinbox_step=10, spinbox_decimals=3, unit="ms")
         self.add_operation("read_subarray_vsize", self.read_subarray_vsize)
@@ -318,8 +251,7 @@ class coherentSvimMeasurement(Measurement):
  
     
         #set functions
-        self.f_min.hardware_set_func = self.set_f_min
-        self.f_max.hardware_set_func = self.set_f_max
+        self.had_pat_num.hardware_set_func = self.set_had_pat_num
         self.PosNeg.hardware_set_func = self.set_PosNeg
         self.exposure.hardware_set_func = self.set_exposure
         self.ROI_s_z.hardware_set_func = self.set_ROI_s_z
@@ -388,7 +320,7 @@ class coherentSvimMeasurement(Measurement):
     def run(self):
         
         
-        print('\n\n======================================\n   Coherent SVIM measurement begins\n======================================\n\n')
+        print('\n\n===============================================\n   Coherent SVIM HADAMARD measurement begins\n===============================================\n\n')
         
         self.frame_index = -1
         self.eff_subarrayh = int(self.camera.subarrayh.val/self.camera.binning.val)
@@ -410,8 +342,7 @@ class coherentSvimMeasurement(Measurement):
         
         
         
-        self.freqs = self.calculate_freq(self.settings['f_min'], self.settings['f_max'], self.settings['ROI_s_z'] ) # TODO See problem described in the setup
-        self.settings['num_frames']  = (1 + self.settings['PosNeg']) * len(self.freqs)
+        self.settings['num_frames']  = (1 + self.settings['PosNeg']) *self.settings['had_pat_num']
         num_frames = self.settings['num_frames']
         
         self.settings['edge_trigger_margin'] = self.calculate_margin()
@@ -437,61 +368,42 @@ class coherentSvimMeasurement(Measurement):
             trigger_input = [self.dmd_hw.trigger_input.val]*num_frames
             trigger_output = [self.dmd_hw.trigger_output.val]*num_frames
             rep = num_frames
-           
             
             transpose_pattern = self.settings['transpose_pattern']
     
-            crop_squared_size = [self.settings['ROI_s_z'], self.settings['ROI_s_y']]
-              
-            if self.dmd_hw.squared_pattern_origin.val == 'rectangle_center':
-                centered = True
-            else:
-                centered = False
+            cropped_field_size = [self.settings['ROI_s_z'], self.settings['ROI_s_y']]
             
-            print(f'\nCreating {num_frames} patterns...\n\nTheoretical frequencies: ', self.freqs)
+            print(f'\nCreating {num_frames} patterns...')
             print('\nPosNeg: ', self.settings['PosNeg'])
             print('Transpose: ', self.settings['transpose_pattern'])
             print('\nPlease wait...', end = '')
             
-            mask = create_rectangle_mask(crop_squared_size)
+            mask = create_rectangle_mask(cropped_field_size)
             
-            # common initial phase
-            phase = 0
-            
-            images = []
-            freqs_out = []
             
             if self.settings['PosNeg'] == False:
                  
-                for freq in self.freqs:
-    
-                    im_pos, freq_out = create_squared_pattern_from_freq(freq,transpose_pattern, crop_squared_size, centered, phase)
-                    
-                    images.append(im_pos)
-                    freqs_out.append(freq_out)
+                images = create_hadamard_patterns( self.settings['had_pat_num'], transpose_pattern, cropped_field_size )
             
             else:
                 #PosNeg
-                for freq in self.freqs:
-    
-                    im_pos, freq_out = create_squared_pattern_from_freq(freq,transpose_pattern, crop_squared_size, centered, phase)
-                    im_neg = np.uint8(np.logical_not(im_pos)*1)
-                    
-                    images.append(im_pos)
+                images = []
+                im_pos = create_hadamard_patterns( self.settings['had_pat_num'], transpose_pattern, cropped_field_size )
+                        
+                for im in im_pos:
+                    images.append(im)
+                    im_neg = np.uint8(np.logical_not(im)*1)
                     images.append(im_neg)
-                    freqs_out.append(freq_out)
-                        
-                        
+                    
+                    
             images_arr = np.array(images)
             cropped_images = list(images_arr*mask)
                 
             print(f'     >>     Pattern creation completed ({time.time() - t_load_init:.3f} s)\n')
-            print('The actual displayed frequencies are: ', freqs_out)
             
-    
             self.dmd_hw.dmd.def_sequence(cropped_images, exposure_dmd,trigger_input,dark_time,trigger_output,rep)
             
-            print("\n****************\nLoad squared ends\n****************\n")
+            print("\n****************\nLoad Hadamard ends\n****************\n")
             
         elif not self.settings['time_lapse'] :
             print('WARNING!\nNo images uploaded: the DMD uses the last uploaded sequence of patterns')
@@ -555,8 +467,6 @@ class coherentSvimMeasurement(Measurement):
             
             print('\nSaving frames')
             
-            self.save_h5dataset(time_index)
-                    
             while frame_index < self.camera.hamamatsu.number_image_buffers:
     
                 # Get frames.
@@ -568,10 +478,10 @@ class coherentSvimMeasurement(Measurement):
                     
                     self.np_data = aframe.getData()  
                     self.image = np.reshape(self.np_data,(self.eff_subarrayv, self.eff_subarrayh)) 
-                    self.h5file.flush() 
                     
-                    self.image_h5[frame_index,:,:] = self.image
-                        
+                    self.image_h5[time_index][frame_index,:,:] = self.image
+                    self.h5file.flush() 
+                                        
                     frame_index += 1
                     self.frame_index = frame_index 
                     
@@ -628,51 +538,12 @@ class coherentSvimMeasurement(Measurement):
         
         
         
-        print('\n======================================\nCoherent SVIM measurement has finished\n======================================\n\n')
+        print('\n===============================================\nCoherent SVIM HADAMARD measurement has finished\n===============================================\n\n')
         
- 
+  
+    
+        
     def initH5(self):
-        
-        def create_saving_directory():
-            if not os.path.isdir(self.app.settings['save_dir']):
-                os.makedirs(self.app.settings['save_dir'])    
-        
-        create_saving_directory()
-        
-        # file name creation
-        timestamp = time.strftime("%y%m%d_%H%M%S", time.localtime())
-        sample = self.app.settings['sample']
-        if sample == '':
-            sample_name = '_'.join([timestamp, self.name])
-        else:
-            sample_name = '_'.join([timestamp, self.name, sample])
-        fname = os.path.join(self.app.settings['save_dir'], sample_name + '.h5')
-        
-        # file creation
-        self.h5file = h5_io.h5_base_file(app=self.app, measurement=self, fname = fname)
-        self.h5_group = h5_io.h5_create_measurement_group(measurement=self, h5group=self.h5file)
-        
-    def save_h5dataset(self,t_index):
-        
-        img_size = self.image.shape
-        length = self.settings['num_frames']
-        
-        name = f't{t_index:04d}/c0000/image'
-        image_h5 = self.h5_group.create_dataset( name  = name, 
-                                                      shape = ( length, img_size[0], img_size[1]),
-                                                      dtype = self.image.dtype, chunks = (1, self.eff_subarrayv, self.eff_subarrayh)
-                                                      )
-        image_h5.dims[0].label = "z"
-        image_h5.dims[1].label = "y"
-        image_h5.dims[2].label = "x"
-        image_h5.attrs['element_size_um'] =  [1,1,1] # required for compatibility with imageJ
-        timestamp = time.strftime("%y%m%d_%H%M%S", time.localtime())
-        image_h5.attrs['timestamp'] = timestamp
-        self.image_h5 = image_h5            
-    
-    
-        
-    def _initH5(self):
         
         def create_saving_directory():
             if not os.path.isdir(self.app.settings['save_dir']):

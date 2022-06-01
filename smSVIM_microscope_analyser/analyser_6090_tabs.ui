@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>1068</width>
-    <height>681</height>
+    <height>704</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -78,7 +78,7 @@
         </layout>
        </item>
        <item row="1" column="0">
-        <layout class="QGridLayout" name="gridLayout_18" columnstretch="0,0,0,0,0,0">
+        <layout class="QGridLayout" name="gridLayout_18" columnstretch="0,1,0,1,0,1">
          <property name="leftMargin">
           <number>12</number>
          </property>
@@ -767,7 +767,12 @@
                 </property>
                 <item>
                  <property name="text">
-                  <string>Sum time frame planes</string>
+                  <string>Average over time frame</string>
+                 </property>
+                </item>
+                <item>
+                 <property name="text">
+                  <string>Maximum over time frame</string>
                  </property>
                 </item>
                 <item>
@@ -1196,6 +1201,9 @@
                   <property name="text">
                    <string>xy</string>
                   </property>
+                  <property name="checked">
+                   <bool>true</bool>
+                  </property>
                  </widget>
                 </item>
                 <item row="0" column="2">
@@ -1214,7 +1222,7 @@
                    <string>xz</string>
                   </property>
                   <property name="checked">
-                   <bool>true</bool>
+                   <bool>false</bool>
                   </property>
                  </widget>
                 </item>
@@ -1245,11 +1253,14 @@
                 <property name="topMargin">
                  <number>0</number>
                 </property>
-                <property name="spacing">
+                <property name="horizontalSpacing">
                  <number>0</number>
                 </property>
+                <property name="verticalSpacing">
+                 <number>10</number>
+                </property>
                 <item row="0" column="0">
-                 <widget class="QCheckBox" name="checkBox_plot_sum">
+                 <widget class="QComboBox" name="comboBox_plot_mode">
                   <property name="enabled">
                    <bool>false</bool>
                   </property>
@@ -1260,12 +1271,21 @@
                     <bold>false</bold>
                    </font>
                   </property>
-                  <property name="text">
-                   <string>Sum along view direction</string>
-                  </property>
-                  <property name="checked">
-                   <bool>true</bool>
-                  </property>
+                  <item>
+                   <property name="text">
+                    <string>Maximum along view direction</string>
+                   </property>
+                  </item>
+                  <item>
+                   <property name="text">
+                    <string>Average along view direction</string>
+                   </property>
+                  </item>
+                  <item>
+                   <property name="text">
+                    <string>Volume as stack</string>
+                   </property>
+                  </item>
                  </widget>
                 </item>
                </layout>
@@ -1815,7 +1835,12 @@
                 </property>
                 <item>
                  <property name="text">
-                  <string>Sum time frame planes</string>
+                  <string>Average time frame planes</string>
+                 </property>
+                </item>
+                <item>
+                 <property name="text">
+                  <string>Maximum over time frame</string>
                  </property>
                 </item>
                 <item>
@@ -2007,7 +2032,7 @@
            <item row="0" column="1">
             <widget class="QGroupBox" name="groupBox_volume_ls">
              <property name="enabled">
-              <bool>true</bool>
+              <bool>false</bool>
              </property>
              <property name="font">
               <font>
@@ -2092,7 +2117,7 @@
                 <item row="0" column="0">
                  <widget class="QLabel" name="label_plot_view_ls">
                   <property name="enabled">
-                   <bool>true</bool>
+                   <bool>false</bool>
                   </property>
                   <property name="font">
                    <font>
@@ -2109,7 +2134,7 @@
                 <item row="0" column="1">
                  <widget class="QRadioButton" name="radioButton_plot_xy_ls">
                   <property name="enabled">
-                   <bool>true</bool>
+                   <bool>false</bool>
                   </property>
                   <property name="font">
                    <font>
@@ -2129,7 +2154,7 @@
                 <item row="0" column="2">
                  <widget class="QRadioButton" name="radioButton_plot_xz_ls">
                   <property name="enabled">
-                   <bool>true</bool>
+                   <bool>false</bool>
                   </property>
                   <property name="font">
                    <font>
@@ -2149,7 +2174,7 @@
                 <item row="0" column="3">
                  <widget class="QRadioButton" name="radioButton_plot_yz_ls">
                   <property name="enabled">
-                   <bool>true</bool>
+                   <bool>false</bool>
                   </property>
                   <property name="font">
                    <font>
@@ -2177,9 +2202,9 @@
                  <number>0</number>
                 </property>
                 <item row="0" column="0">
-                 <widget class="QCheckBox" name="checkBox_plot_sum_ls">
+                 <widget class="QComboBox" name="comboBox">
                   <property name="enabled">
-                   <bool>true</bool>
+                   <bool>false</bool>
                   </property>
                   <property name="font">
                    <font>
@@ -2188,12 +2213,21 @@
                     <bold>false</bold>
                    </font>
                   </property>
-                  <property name="text">
-                   <string>Sum along view direction</string>
-                  </property>
-                  <property name="checked">
-                   <bool>true</bool>
-                  </property>
+                  <item>
+                   <property name="text">
+                    <string>Average along view direction</string>
+                   </property>
+                  </item>
+                  <item>
+                   <property name="text">
+                    <string>Maximum along view direction</string>
+                   </property>
+                  </item>
+                  <item>
+                   <property name="text">
+                    <string>Volume as stack</string>
+                   </property>
+                  </item>
                  </widget>
                 </item>
                </layout>
@@ -2201,7 +2235,7 @@
               <item>
                <widget class="QPushButton" name="pushButton_show_ls">
                 <property name="enabled">
-                 <bool>true</bool>
+                 <bool>false</bool>
                 </property>
                 <property name="font">
                  <font>
@@ -2239,7 +2273,7 @@
               <item>
                <widget class="QPushButton" name="pushButton_denoise_ls">
                 <property name="enabled">
-                 <bool>true</bool>
+                 <bool>false</bool>
                 </property>
                 <property name="font">
                  <font>

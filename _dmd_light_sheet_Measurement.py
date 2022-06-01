@@ -1,8 +1,11 @@
-""" 
-   Written by Michele Castriotta, Alessandro Zecchi, Andrea Bassi (Polimi).
-   Code for creating the measurement class of ScopeFoundry for the Orca Flash 4V3
-   11/18
+# -*- coding: utf-8 -*-
 """
+Created on Mon May 16 16:23:56 2022
+
+@author: SPIM-OPT
+"""
+
+
 
 from ScopeFoundry import Measurement
 from ScopeFoundry.helper_funcs import sibling_path, load_qt_ui_file
@@ -14,103 +17,67 @@ import time
         
 
 
-
-def create_squared_pattern_from_freq(num_of_periods = 1, transpose_pattern=False, cropped_field_size = [270, 810],
-                           centered = True, phase = 0.0, im_size = [1080, 1920]):
-    """    
-    We have to generate a square wave of given period with inclination of 45° over
-    a frame of dimensions 1080x1920
+def create_light_sheets(ROI_size = [270, 810], sheet_width = 10, transpose = False,  im_size = [1080, 1920]):
     
-    Each square pixel has border length s_pixel = 7.56 um
-    The unit period is period_unit = sqrt(2)*s_pixel = 10.7 um
-    
-    OUTPUTS:
-        - image             : 8bit image (numpy.uint8 array) with the desired pattern
-        - displayed_per_num : (float) Actual number of periods displayed in the ROI rectangle
-    
-    PARAMETERS:
-        - num_of_periods    : number of periods in the cropped ROI width
-        - transpose_pattern : FASLE -> antiDIAG, TRUE -> DIAG
-        - centered          : TRUE -> set the origin of the square wave to the center of the
-                              cropped rectangle. FALSE -> the origin will be the upper left
-                              corner of the cropped rectangle
-        - phase             : offset phase expressed as a fraction of the period (0.5 -> 180deg)
-        - cropped_field_size: dimentions of the rectangle ROI. First dimention refers to the border
-                              parallel to the diagonal direction and the second to the border parallel to the
-                              anti-diagonal direction. Default is [270,810] to have the largest rectangle with
-                              borders proportioned 3:1
-        - im_size           : Size of the outpun image in pizel; default is [1080,1920]
-        
     """
+    ROI_size:           dimentions of the rectangle ROI. First dimention refers to the border
+                        parallel to the diagonal direction and the second to the border parallel to the
+                        anti-diagonal direction. Default is [270,810], the largest rectangle with
+                        borders proportioned 3:1 in a 1080x1920 image
+    sheet_width:        width of the single light sheet rectangle
+    transpose:          False -> the different sheets are parallel to the anti-diagonal direction
+                        True  -> the different sheets are parallel to the diagonal direction
+    im_size:            size of the whole image
+    """
+   
     
     s_y = im_size[0]
     s_x = im_size[1]
     
     # dimentions of the rectangle to be cropped out in units of pizel diagonal (same as unit_period)
-    s_diag = cropped_field_size[0] #dimension of the border parallel to the diagonal direction
-    s_anti = cropped_field_size[1] #dimension of the border parallel to the antidiagonal direction  
+    s_diag = ROI_size[0] #dimension of the border parallel to the diagonal direction
+    s_anti = ROI_size[1] #dimension of the border parallel to the antidiagonal direction  
 
-
+    delta_x_0 = - s_x/2 + s_anti/2 + s_diag/2
+    delta_y_0 = - s_y/2 + s_anti/2 - s_diag/2
     
+    if s_diag + s_anti > np.min(im_size):
+        print('WARNING: The cropped field rectangle exceeds the DMD')
+   
+    X,Y = np.meshgrid(range(s_x), range(s_y))
     
-    # uniform illumination
-    if num_of_periods == 0:
-        return np.ones(im_size, dtype = 'uint8'), 0
+    # @time_it
+    def rectangle(x,y, s_diag, s_anti):
+       return np.multiply( np.multiply(-1< x+y , x + y < 2*s_anti)  , np.multiply(  -1< x-y , x-y  < 2*s_diag))
     
-
-
-    image = np.zeros(im_size, dtype = 'uint8')
-    # image = np.zeros(size, dtype = 'bool')
-    
-    if not transpose_pattern:
+    sheets = []
+   
+    if not transpose:
+        if s_diag % sheet_width != 0:
+            print('The ROI is not a multiple of light sheet width')
+        N = int(np.floor(s_diag/sheet_width))
         
-        # antidiag
+        delta_x = np.linspace(0, N*sheet_width, N, dtype = int, endpoint = False)
+        delta_y = -delta_x
         
-        # t = time.time()
         
-        period = int(s_diag/num_of_periods)
-        disp_per_num = s_diag/period
+        for i in range(N):
+            sheet = rectangle((X + delta_x_0 - delta_x[i]),  (Y + delta_y_0 - delta_y[i]), sheet_width, s_anti  )*np.uint8(1)
+            sheets.append(sheet)
         
-        shift =  (s_y + s_x)/2  - (not centered)*(int(period/2) + s_diag) + int(2*period*phase)
+    else:
+        if s_anti % sheet_width != 0:
+            print('The ROI is not a multiple of light sheet width')
+        N = int(np.floor(s_anti/sheet_width))
         
-        # I create the single strip to shift
-        
-        x_coord = np.linspace(-shift, (s_x + s_y - shift -1), s_x + s_y)
-        strip = np.uint8(( x_coord%(2*period) < period)*1)
-        # strip = ( x_coord%(2*period) < period)
-        
-        # I move the squarewave strip to create the 45deg angle
+        delta_x = np.linspace(0, N*sheet_width, N, dtype = int, endpoint = False)
+        delta_y = delta_x
          
-        for i in range(s_y):
-            image[i, :] = strip[(s_y-i-1):(s_y + s_x -i-1)]
-             
-            
-        # print(f'Time for creation of uncropped image: {time.time() - t}')
+        for i in range(N):
+            sheet = rectangle((X + delta_x_0 - delta_x[i]),  (Y + delta_y_0 - delta_y[i]), s_diag , sheet_width )*np.uint8(1)
+            sheets.append(sheet)
     
-    else:    
-        # transpose but we still use the same periods that are generated along z without transposing
-        # diag
-        
-        # t = time.time()
-        
-        period = int(s_diag/num_of_periods)  # NOTE Here we originally had s_anti as paramenter, but to create patterns with the same period as when Transpose = False we put s_diag (<-> s_z)
-        disp_per_num = s_diag/period
-        
-        shift = (s_y + s_x)/2  - (not centered)*(int(period/2)  + s_anti)  + int(2*period*phase)
-        
-        x_coord = np.linspace(-shift, (s_x + s_y - shift -1), s_x + s_y)
-        strip = np.uint8(( x_coord%(2*period) < period)*1)
-        # strip = ( x_coord%(2*period) < period)
-        
-        for i in range(s_y):
-            image[i, :] = strip[(i):( s_x +i)]
-            
-            
-        # print(f'Time for creation of uncropped image: {time.time() - t}')    
-                        
-    return image, disp_per_num
-
-
+    return sheets
 
 def create_rectangle_mask(cropped_field_size = [270, 810], im_size = [1080, 1920]):
     
@@ -143,94 +110,68 @@ def create_rectangle_mask(cropped_field_size = [270, 810], im_size = [1080, 1920
     
     
     return mask
+
+class DMD_light_sheet_measurement(Measurement):     
     
+    name = "DMD_light_sheet"
     
 
-
-
-class coherentSvimMeasurement(Measurement):     
-    
-    name = "coherent_SVIM"
-    
-    
     def calculate_time_frames_n(self):
-        
         if not self.settings['time_lapse']:
             return int(1)
         else:
-            delay = 0.54# 0.3s is the trigger dead time we set, 0.24 is an empirical dead computational time
-            return int(np.ceil( self.settings['obs_time'] / ( (self.settings['num_frames']/self.settings['effective_fps']) + self.settings['dark_time'] + delay ) ))  
+            # 0.3s is the trigger dead time we set. 0.24 is an empirical time found to take in consideration computational dead times of each iteration of the for loop
+            return int(np.ceil(    self.settings['obs_time'] / ( (self.settings['num_frames']/self.settings['effective_fps']) + self.settings['dark_time'] + 0.3 + 0.24 )    ))  
      
     
-    def calculate_freq(self, f_min, f_max, ROI_s):
-        
-        freqs = np.linspace(f_min, f_max, int(2*(f_max - f_min) + 1),dtype = float)
-                
-        if f_min == 0.0:
-            disp_freqs = [0]
-            for freq in freqs[1:]:
-                period = int(ROI_s/freq)
-                disp_freqs.append(ROI_s/period)
-        else:
-            disp_freqs = []
-            for freq in freqs:
-                period = int(ROI_s/freq)
-                disp_freqs.append(ROI_s/period)
-                
-        mask = np.append(np.diff(disp_freqs)!= 0, True)
-        return np.array(freqs)[mask]
     
-    def set_f_min(self,f_min):
+    def set_sheet_width(self, sheet_width):
         
-        if (f_min*10)%5 != 0:
-            f_min = round(f_min*2)/2
-            self.settings['f_min'] = f_min
-        elif f_min >  self.settings['f_max']:
-            self.settings['f_min'] = self.settings['f_max']
-        
-        elif hasattr(self, 'num_frames'):
-            self.freqs = self.calculate_freq(f_min, self.settings['f_max'], self.settings['ROI_s_z'] )     
-            self.settings['num_frames']  = (1 + self.settings['PosNeg']) * len(self.freqs)
-        
-            if hasattr(self, 'time_frames_n'):
-                self.settings['time_frames_n'] = self.calculate_time_frames_n()
+        if hasattr(self, 'transpose_pattern'):
+            if not self.settings['transpose_pattern']:
+                 self.settings['num_frames'] = (1 + self.settings['PosNeg']) * int(np.floor(self.settings['ROI_s_z']/sheet_width))
+            else:
+                 self.settings['num_frames'] = (1 + self.settings['PosNeg']) * int(np.floor(self.settings['ROI_s_y']/sheet_width))
+               
+        if hasattr(self, 'time_frames_n'):
+            self.settings['time_frames_n'] = self.calculate_time_frames_n()
             
-    def set_f_max(self,f_max):
-        
-        if (f_max*10)%5 != 0:
-            f_max = round(f_max*2)/2
-            self.settings['f_max'] = f_max
-        elif f_max <  self.settings['f_min']:
-            self.settings['f_max'] = self.settings['f_min']
-        
-        elif hasattr(self, 'num_frames'):
-            self.freqs = self.calculate_freq(self.settings['f_min'], f_max, self.settings['ROI_s_z'] )     
-            self.settings['num_frames']  = (1 + self.settings['PosNeg']) * len(self.freqs)
-     
-            if hasattr(self, 'time_frames_n'):
-                self.settings['time_frames_n'] = self.calculate_time_frames_n()
-                
     def set_PosNeg(self, PosNeg):
         
         if hasattr(self, 'num_frames'):
-            if hasattr(self, 'freqs'):
-                self.settings['num_frames']  =(1 + PosNeg) * (len(self.freqs))
+            
+            if not self.settings['transpose_pattern']:
+                self.settings['num_frames'] = (1 + PosNeg) * int(np.floor(self.settings['ROI_s_z']/self.settings['sheet_width']))
             else:
-                self.freqs = self.calculate_freq(self.settings['f_min'], self.settings['f_max'], self.settings['ROI_s_z'] )
-                self.settings['num_frames']  =(1 + PosNeg) * (len(self.freqs))
-                
-            if hasattr(self, 'time_frames_n'):
-                    self.settings['time_frames_n'] = self.calculate_time_frames_n()
+                self.settings['num_frames'] = (1 + PosNeg) * int(np.floor(self.settings['ROI_s_y']/self.settings['sheet_width']))
+        
+        if hasattr(self, 'time_frames_n'):
+                self.settings['time_frames_n'] = self.calculate_time_frames_n()
                 
     def set_ROI_s_z(self, ROI_s_z):
         
-        if hasattr(self, 'num_frames'):
-            self.freqs = self.calculate_freq(self.settings['f_min'], self.settings['f_max'], ROI_s_z )    
-            self.settings['num_frames']  =(1 + self.settings['PosNeg']) * len(self.freqs)
-            
-            if hasattr(self, 'time_frames_n'):
+        if hasattr(self, 'transpose_pattern') and not self.settings['transpose_pattern'] :
+            self.settings['num_frames'] = (1 + self.settings['PosNeg']) * int(np.floor(ROI_s_z/self.settings['sheet_width']))
+        if hasattr(self, 'time_frames_n'):
                 self.settings['time_frames_n'] = self.calculate_time_frames_n()
-           
+            
+    def set_ROI_s_y(self, ROI_s_y):
+        
+        if hasattr(self, 'transpose_pattern') and self.settings['transpose_pattern'] :
+            self.settings['num_frames'] = (1 + self.settings['PosNeg']) * int(np.floor(ROI_s_y/self.settings['sheet_width']))        
+        if hasattr(self, 'time_frames_n'):
+            self.settings['time_frames_n'] = self.calculate_time_frames_n()
+            
+    def set_transpose_pattern(self, transpose):
+        
+        if not transpose:
+            self.settings['num_frames'] = (1 + self.settings['PosNeg']) * int(np.floor(self.settings['ROI_s_z']/self.settings['sheet_width']))
+        else:
+            self.settings['num_frames'] = (1 + self.settings['PosNeg']) * int(np.floor(self.settings['ROI_s_y']/self.settings['sheet_width']))
+            
+        if hasattr(self, 'time_frames_n'):
+                self.settings['time_frames_n'] = self.calculate_time_frames_n()    
+        
     def calculate_margin(self):
         
         read_one_line = 9.74436 #(us)
@@ -243,6 +184,7 @@ class coherentSvimMeasurement(Measurement):
     def calculate_eff_fps(self):
         
         return 1000/(self.settings['exposure']+ self.settings['edge_trigger_margin']) #(fps)
+     
     
     def set_exposure(self, exposure):
         
@@ -251,12 +193,11 @@ class coherentSvimMeasurement(Measurement):
         
         if hasattr(self, 'time_frames_n'):
             self.settings['time_frames_n'] = self.calculate_time_frames_n()
-     
 
     def read_subarray_vsize(self):
         
         self.settings['edge_trigger_margin'] = self.calculate_margin()
-        self.settings['effective_fps'] =  self.calculate_eff_fps()   
+        self.settings['effective_fps'] =  self.calculate_eff_fps()     
         
         if hasattr(self, 'time_frames_n'):
             self.settings['time_frames_n'] = self.calculate_time_frames_n()
@@ -264,7 +205,7 @@ class coherentSvimMeasurement(Measurement):
     def set_time_lapse(self, time_lapse):
         if hasattr(self, 'time_frames_n'):
             self.settings['time_frames_n'] = self.calculate_time_frames_n()
-        
+    
     def set_obs_time(self, obs_time):
         
         if hasattr(self, 'time_frames_n'):
@@ -273,11 +214,6 @@ class coherentSvimMeasurement(Measurement):
         
         if hasattr(self, 'time_frames_n'):
             self.settings['time_frames_n'] = self.calculate_time_frames_n()
-        
-            
-        
-        
-        
         
         
         
@@ -299,13 +235,12 @@ class coherentSvimMeasurement(Measurement):
         self.settings.New('auto_levels', dtype=bool, initial=True )
         self.settings.New('level_min', dtype=int, initial=60 )
         self.settings.New('level_max', dtype=int, initial=150 )
-        self.f_min = self.settings.New('f_min', dtype=float, initial=0.0, spinbox_step= 0.5 , spinbox_decimals= 1, vmin = 0)
-        self.f_max = self.settings.New('f_max', dtype=float, initial=30.0 , spinbox_step= 0.5, spinbox_decimals=1, vmin = 0)
-        self.PosNeg = self.settings.New('PosNeg', dtype = bool, initial = True)
-        self.num_frames = self.settings.New('num_frames',ro = True, dtype = int, initial = 70)    # TODO The initial value of this setting is critical: so far it must be updated manually if one changes any other initial value. Should we calculate self.freqs during the setup period and put here initial = len(self.freqs)?
+        self.sheet_width = self.settings.New('sheet_width', dtype = int, initial = 10, vmin = 1, unit = 'px')
+        self.PosNeg = self.settings.New('PosNeg', dtype = bool, initial = False)
+        self.num_frames = self.settings.New('num_frames',ro = True, dtype = int, initial = 20)  # TODO The initial value of this setting is critical: so far it must be updated manually if one changes any other initial value. Should we calculate self.freqs during the setup period and put here initial = len(self.freqs)?
         self.ROI_s_z = self.settings.New('ROI_s_z', dtype=int, initial=200, unit = 'px' )
-        self.settings.New('ROI_s_y', dtype=int, initial=600, unit = 'px' )
-        self.settings.New('transpose_pattern', dtype=bool, initial=False )
+        self.ROI_s_y = self.settings.New('ROI_s_y', dtype=int, initial=600, unit = 'px' )
+        self.transpose_pattern = self.settings.New('transpose_pattern', dtype=bool, initial=False )
         self.exposure = self.settings.New("exposure", dtype = float, initial=100, vmin=1.004, vmax = 1e4, spinbox_step=10, spinbox_decimals=3, unit="ms")
         self.add_operation("read_subarray_vsize", self.read_subarray_vsize)
         self.settings.New('edge_trigger_margin', dtype = float, initial = self.calculate_margin(), vmin = 0.0, ro=True, spinbox_decimals = 3 , unit = 'ms')
@@ -316,22 +251,18 @@ class coherentSvimMeasurement(Measurement):
         self.dark_time = self.settings.New('dark_time', dtype = float, initial = 0.0, vmin = 0, spinbox_decimals = 3, spinbox_step = 1, unit = 's')
         self.time_frames_n  = self.settings.New('time_frames_n', dtype = int, initial = 1, vmin = 1, ro = True)
  
-    
         #set functions
-        self.f_min.hardware_set_func = self.set_f_min
-        self.f_max.hardware_set_func = self.set_f_max
+        self.sheet_width.hardware_set_func = self.set_sheet_width
         self.PosNeg.hardware_set_func = self.set_PosNeg
-        self.exposure.hardware_set_func = self.set_exposure
         self.ROI_s_z.hardware_set_func = self.set_ROI_s_z
+        self.ROI_s_y.hardware_set_func = self.set_ROI_s_y
+        self.transpose_pattern.hardware_set_func = self.set_transpose_pattern
+        self.exposure.hardware_set_func = self.set_exposure
         self.time_lapse.hardware_set_func = self.set_time_lapse
         self.obs_time.hardware_set_func = self.set_obs_time
         self.dark_time.hardware_set_func = self.set_dark_time
         
-        
-        
-        # TODO This does not actually work, the wrong initial value for num_frames is not corrected! 
-        self.settings['PosNeg'] = True # TODO decide if this is a good solution for the problem of self.num_frames updating on setup. This line should also ensures that self.freqs is created 
-        
+    
     def setup_figure(self):
         """
         Runs once during App initialization, after setup()
@@ -388,7 +319,7 @@ class coherentSvimMeasurement(Measurement):
     def run(self):
         
         
-        print('\n\n======================================\n   Coherent SVIM measurement begins\n======================================\n\n')
+        print('\n\n======================================\n  DMD light sheet measurement begins\n======================================\n\n')
         
         self.frame_index = -1
         self.eff_subarrayh = int(self.camera.subarrayh.val/self.camera.binning.val)
@@ -409,9 +340,11 @@ class coherentSvimMeasurement(Measurement):
         self.camera.hamamatsu.stopAcquisition()
         
         
-        
-        self.freqs = self.calculate_freq(self.settings['f_min'], self.settings['f_max'], self.settings['ROI_s_z'] ) # TODO See problem described in the setup
-        self.settings['num_frames']  = (1 + self.settings['PosNeg']) * len(self.freqs)
+        if not self.settings['transpose_pattern']:
+             self.settings['num_frames'] = (1 + self.settings['PosNeg']) * int(np.floor(self.settings['ROI_s_z']/self.settings['sheet_width']))
+        else:
+             self.settings['num_frames'] = (1 + self.settings['PosNeg']) * int(np.floor(self.settings['ROI_s_y']/self.settings['sheet_width']))
+             
         num_frames = self.settings['num_frames']
         
         self.settings['edge_trigger_margin'] = self.calculate_margin()
@@ -423,82 +356,62 @@ class coherentSvimMeasurement(Measurement):
         self.camera.settings['number_frames'] = num_frames
         self.camera.settings['exposure_time'] = exposure*1e-3
         
+        
         # =============================================================================
         #        upload patterns 
         # =============================================================================
-        
+                
         
         if not self.settings['skip_upload'] or self.settings['time_lapse']:
         
             print("\n****************\nLoading pattern\n****************\n")
             t_load_init = time.time()
-            
+    
             dark_time = [self.dmd_hw.dark_time.val]*num_frames
             trigger_input = [self.dmd_hw.trigger_input.val]*num_frames
             trigger_output = [self.dmd_hw.trigger_output.val]*num_frames
             rep = num_frames
-           
             
             transpose_pattern = self.settings['transpose_pattern']
     
-            crop_squared_size = [self.settings['ROI_s_z'], self.settings['ROI_s_y']]
-              
-            if self.dmd_hw.squared_pattern_origin.val == 'rectangle_center':
-                centered = True
-            else:
-                centered = False
+            ROI_size = [self.settings['ROI_s_z'], self.settings['ROI_s_y']]
             
-            print(f'\nCreating {num_frames} patterns...\n\nTheoretical frequencies: ', self.freqs)
+            print(f'\nCreating {num_frames} patterns...')
             print('\nPosNeg: ', self.settings['PosNeg'])
             print('Transpose: ', self.settings['transpose_pattern'])
             print('\nPlease wait...', end = '')
             
-            mask = create_rectangle_mask(crop_squared_size)
             
-            # common initial phase
-            phase = 0
-            
-            images = []
-            freqs_out = []
             
             if self.settings['PosNeg'] == False:
                  
-                for freq in self.freqs:
-    
-                    im_pos, freq_out = create_squared_pattern_from_freq(freq,transpose_pattern, crop_squared_size, centered, phase)
-                    
-                    images.append(im_pos)
-                    freqs_out.append(freq_out)
-            
+                images = create_light_sheets(ROI_size , self.settings['sheet_width'], transpose_pattern)
+                
             else:
                 #PosNeg
-                for freq in self.freqs:
-    
-                    im_pos, freq_out = create_squared_pattern_from_freq(freq,transpose_pattern, crop_squared_size, centered, phase)
-                    im_neg = np.uint8(np.logical_not(im_pos)*1)
-                    
-                    images.append(im_pos)
-                    images.append(im_neg)
-                    freqs_out.append(freq_out)
-                        
-                        
-            images_arr = np.array(images)
-            cropped_images = list(images_arr*mask)
+                images = []
+                im_pos = create_light_sheets(ROI_size , self.settings['sheet_width'], transpose_pattern)
                 
+                mask = create_rectangle_mask(ROI_size)
+                
+                for im in im_pos:
+                    images.append(im)
+                    im_neg = np.uint8(np.logical_not(im)*1)
+                    images.append(im_neg*mask)
+                        
             print(f'     >>     Pattern creation completed ({time.time() - t_load_init:.3f} s)\n')
-            print('The actual displayed frequencies are: ', freqs_out)
             
     
-            self.dmd_hw.dmd.def_sequence(cropped_images, exposure_dmd,trigger_input,dark_time,trigger_output,rep)
+            self.dmd_hw.dmd.def_sequence(images, exposure_dmd,trigger_input,dark_time,trigger_output,rep)
             
-            print("\n****************\nLoad squared ends\n****************\n")
+            print("\n****************\nLoad sheets ends\n****************\n")
             
         elif not self.settings['time_lapse'] :
             print('WARNING!\nNo images uploaded: the DMD uses the last uploaded sequence of patterns')
-
-        
-        self.initH5()
-
+           
+       
+        self.initH5() 
+           
         # for loop for time lapse
     
         
@@ -555,8 +468,6 @@ class coherentSvimMeasurement(Measurement):
             
             print('\nSaving frames')
             
-            self.save_h5dataset(time_index)
-                    
             while frame_index < self.camera.hamamatsu.number_image_buffers:
     
                 # Get frames.
@@ -568,10 +479,10 @@ class coherentSvimMeasurement(Measurement):
                     
                     self.np_data = aframe.getData()  
                     self.image = np.reshape(self.np_data,(self.eff_subarrayv, self.eff_subarrayh)) 
-                    self.h5file.flush() 
                     
-                    self.image_h5[frame_index,:,:] = self.image
-                        
+                    self.image_h5[time_index][frame_index,:,:] = self.image
+                    self.h5file.flush() 
+                                        
                     frame_index += 1
                     self.frame_index = frame_index 
                     
@@ -593,7 +504,6 @@ class coherentSvimMeasurement(Measurement):
             #=====================================
             
             self.camera.hamamatsu.stopAcquisition()
-            
     
             #=====================================
             # Set trigger to internal
@@ -621,58 +531,28 @@ class coherentSvimMeasurement(Measurement):
                 time.sleep(self.settings['dark_time']) #seconds
                 time_end_of_frame = time.time() - t_init
                 print(f'Total time elapsed: {time_end_of_frame:.3f} s\n')
-        
-        # out of for loop
+          
+        #out of for loop
         self.h5_group.attrs['measure_duration'] = time_end_of_frame
         self.h5file.close()     
         
         
         
-        print('\n======================================\nCoherent SVIM measurement has finished\n======================================\n\n')
+        print('\n========================================\nDMD light sheet measurement has finished\n========================================\n\n')
         
- 
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+    
     def initH5(self):
-        
-        def create_saving_directory():
-            if not os.path.isdir(self.app.settings['save_dir']):
-                os.makedirs(self.app.settings['save_dir'])    
-        
-        create_saving_directory()
-        
-        # file name creation
-        timestamp = time.strftime("%y%m%d_%H%M%S", time.localtime())
-        sample = self.app.settings['sample']
-        if sample == '':
-            sample_name = '_'.join([timestamp, self.name])
-        else:
-            sample_name = '_'.join([timestamp, self.name, sample])
-        fname = os.path.join(self.app.settings['save_dir'], sample_name + '.h5')
-        
-        # file creation
-        self.h5file = h5_io.h5_base_file(app=self.app, measurement=self, fname = fname)
-        self.h5_group = h5_io.h5_create_measurement_group(measurement=self, h5group=self.h5file)
-        
-    def save_h5dataset(self,t_index):
-        
-        img_size = self.image.shape
-        length = self.settings['num_frames']
-        
-        name = f't{t_index:04d}/c0000/image'
-        image_h5 = self.h5_group.create_dataset( name  = name, 
-                                                      shape = ( length, img_size[0], img_size[1]),
-                                                      dtype = self.image.dtype, chunks = (1, self.eff_subarrayv, self.eff_subarrayh)
-                                                      )
-        image_h5.dims[0].label = "z"
-        image_h5.dims[1].label = "y"
-        image_h5.dims[2].label = "x"
-        image_h5.attrs['element_size_um'] =  [1,1,1] # required for compatibility with imageJ
-        timestamp = time.strftime("%y%m%d_%H%M%S", time.localtime())
-        image_h5.attrs['timestamp'] = timestamp
-        self.image_h5 = image_h5            
-    
-    
-        
-    def _initH5(self):
         
         def create_saving_directory():
             if not os.path.isdir(self.app.settings['save_dir']):

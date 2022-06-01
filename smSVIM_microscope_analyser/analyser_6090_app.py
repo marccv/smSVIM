@@ -37,7 +37,7 @@ class basic_app(coherentSVIM_analysis):
         
     def setup(self):
         
-        self.ui_filename = 'analyser_6090_tabs.ui'
+        self.ui_filename = '/Users/marcovitali/Documents/Poli/tesi/ScopeFoundy/coherentSVIM/smSVIM_microscope_analyser/analyser_6090_tabs.ui'
         self.ui = uic.loadUi(self.ui_filename)
         
         # file path and load
@@ -93,16 +93,16 @@ class basic_app(coherentSVIM_analysis):
         
         self.ui.pushButton_show_raw_im.clicked.connect(self.show_im_raw_app)
         self.ui.pushButton_invert.clicked.connect(self.invert_volume_app)
-        
+        self.plot_modes = ['max','ave', 'stack']
         self.ui.pushButton_save_inverted.clicked.connect(self.save_inverted_app)
         self.ui.pushButton_show_inverted.clicked.connect(self.show_projections_app)
         
         
         
         # time lapse section
-        self.time_lapse_modes = ['sum', 'plane']
+        self.time_lapse_modes = ['max','ave', 'plane']
         def change_tl_mode():
-            if self.ui.comboBox_time_lapse_mode.currentIndex() == 0:
+            if self.ui.comboBox_time_lapse_mode.currentIndex() != 2:
                 self.ui.label_tl_plane.setEnabled(False)
                 self.ui.spinBox_time_laps_plane.setEnabled(False)
             else:
@@ -141,9 +141,9 @@ class basic_app(coherentSVIM_analysis):
         self.ui.pushButton_save_volume_ls.clicked.connect(self.save_volume_ls_app)
         self.ui.pushButton_show_ls.clicked.connect(self.show_projections_ls_app)
         
-        self.time_lapse_modes = ['sum', 'plane']
+        self.time_lapse_modes = ['max', 'ave', 'plane']
         def change_tl_mode_ls():
-            if self.ui.comboBox_time_lapse_mode_ls.currentIndex() == 0:
+            if self.ui.comboBox_time_lapse_mode_ls.currentIndex() != 2:
                 self.ui.label_tl_plane_ls.setEnabled(False)
                 self.ui.spinBox_time_laps_plane_ls.setEnabled(False)
             else:
@@ -197,7 +197,7 @@ class basic_app(coherentSVIM_analysis):
                           'single_volume_time_index': self.ui.spinBox_t_frame_index.value(),
                           'save_label': self.ui.lineEdit_save_label.text(),
                           'plot_view': (1*self.ui.radioButton_plot_xz.isChecked() + 2*self.ui.radioButton_plot_yz.isChecked()),
-                          'plot_sum':  self.ui.checkBox_plot_sum.isChecked(),
+                          'plot_mode':  self.plot_modes[self.ui.comboBox_plot_mode.currentIndex()],
                           'time_lapse_mode': self.time_lapse_modes[self.ui.comboBox_time_lapse_mode.currentIndex()],
                           'time_lapse_view': ( 1*self.ui.radioButton_xz.isChecked() + 2*self.ui.radioButton_yz.isChecked()),
                           'time_lapse_plane' : self.ui.spinBox_time_laps_plane.value(),
@@ -222,7 +222,7 @@ class basic_app(coherentSVIM_analysis):
                           'single_volume_time_index': self.ui.spinBox_t_frame_index_ls.value(),
                           'save_label': self.ui.lineEdit_save_label_ls.text(),
                           'plot_view': (1*self.ui.radioButton_plot_xz_ls.isChecked() + 2*self.ui.radioButton_plot_yz_ls.isChecked()),
-                          'plot_sum':  self.ui.checkBox_plot_sum_ls.isChecked(),
+                          'plot_mode':  self.plot_modes[self.ui.comboBox_plot_mode_ls.currentIndex()],
                           'time_lapse_mode': self.time_lapse_modes[self.ui.comboBox_time_lapse_mode_ls.currentIndex()],
                           'time_lapse_view': ( 1*self.ui.radioButton_xz_ls.isChecked() + 2*self.ui.radioButton_yz_ls.isChecked()),
                           'time_lapse_plane' : self.ui.spinBox_time_laps_plane_ls.value(),
@@ -291,7 +291,7 @@ class basic_app(coherentSVIM_analysis):
             self.ui.radioButton_plot_xy.setEnabled(False)
             self.ui.radioButton_plot_xz.setEnabled(False)
             self.ui.radioButton_plot_yz.setEnabled(False)
-            self.ui.checkBox_plot_sum.setEnabled(False)
+            self.ui.comboBox_plot_mode.setEnabled(False)
             self.ui.pushButton_save_inverted_time_lapse.setEnabled(False)
             self.ui.label_save_label_tl.setEnabled(False)
             self.ui.lineEdit_save_label_tl.setEnabled(False)
@@ -329,12 +329,6 @@ class basic_app(coherentSVIM_analysis):
             self.ui.pushButton_save_volume_ls.setEnabled(False)
             self.ui.lineEdit_save_label_ls.setEnabled(False)
             self.ui.label_save_label_ls.setEnabled(False)
-            # self.ui.pushButton_show_ls.setEnabled(True)
-            # self.ui.label_plot_view_ls.setEnabled(True)
-            # self.ui.radioButton_plot_xy_ls.setEnabled(True)
-            # self.ui.radioButton_plot_xz_ls.setEnabled(True)
-            # self.ui.radioButton_plot_yz_ls.setEnabled(True)
-            # self.ui.checkBox_plot_sum_ls.setEnabled(True)
             self.ui.pushButton_save_time_lapse_ls.setEnabled(False)
             self.ui.label_save_label_tl_ls.setEnabled(False)
             self.ui.lineEdit_save_label_tl_ls.setEnabled(False)
@@ -405,7 +399,7 @@ class basic_app(coherentSVIM_analysis):
         self.ui.radioButton_plot_xy.setEnabled(True)
         self.ui.radioButton_plot_xz.setEnabled(True)
         self.ui.radioButton_plot_yz.setEnabled(True)
-        self.ui.checkBox_plot_sum.setEnabled(True)
+        self.ui.comboBox_plot_mode.setEnabled(True)
         
         
         
@@ -425,24 +419,41 @@ class basic_app(coherentSVIM_analysis):
         # dmdPx_to_sample_ratio = 1.247 # (um/px)
         depth_z = (self.ROI_s_z * 1.247e-6 / self.image_inv.shape[0] )
         
-        if self.params['plot_sum']:
+        if self.params['plot_mode'] == 'ave':
             
             if self.params['plot_view'] == 0:   #xy
-                title= f"Inverted image XY SUM (base: {self.params['base']})"
-                show_image(np.sum(self.image_inv, 0), title= title, ordinate = 'X', ascisse = 'Y', 
+                title= f"Inverted image XY AVERAGE (base: {self.params['base']})"
+                show_image(np.mean(self.image_inv, 0), title= title, ordinate = 'X', ascisse = 'Y', 
                            scale_ord = 0.65e-6, scale_asc = 0.65e-6)  
                 
             elif self.params['plot_view'] == 1: #xz
-                title= f"Inverted image XZ SUM (base: {self.params['base']})"
-                show_image(np.sum(self.image_inv, 2).transpose(), title= title, ordinate = 'X', ascisse = 'Z', 
+                title= f"Inverted image XZ AVERAGE (base: {self.params['base']})"
+                show_image(np.mean(self.image_inv, 2).transpose(), title= title, ordinate = 'X', ascisse = 'Z', 
                            scale_ord = 0.65e-6, scale_asc = depth_z )  
                 
             elif self.params['plot_view'] == 2: #yz
-                title= f"Inverted image YZ SUM (base: {self.params['base']})"
-                show_image(np.sum(self.image_inv, 1), title= title, ordinate = 'Z', ascisse = 'Y', 
+                title= f"Inverted image YZ AVERAGE (base: {self.params['base']})"
+                show_image(np.mean(self.image_inv, 1), title= title, ordinate = 'Z', ascisse = 'Y', 
                            scale_ord = depth_z, scale_asc = 0.65e-6 )  
                 
-        else:
+        if self.params['plot_mode'] == 'max':
+            
+            if self.params['plot_view'] == 0:   #xy
+                title= f"Inverted image XY MAX (base: {self.params['base']})"
+                show_image(np.max(self.image_inv, 0), title= title, ordinate = 'X', ascisse = 'Y', 
+                           scale_ord = 0.65e-6, scale_asc = 0.65e-6)  
+                
+            elif self.params['plot_view'] == 1: #xz
+                title= f"Inverted image XZ MAX (base: {self.params['base']})"
+                show_image(np.max(self.image_inv, 2).transpose(), title= title, ordinate = 'X', ascisse = 'Z', 
+                           scale_ord = 0.65e-6, scale_asc = depth_z )  
+                
+            elif self.params['plot_view'] == 2: #yz
+                title= f"Inverted image YZ MAX (base: {self.params['base']})"
+                show_image(np.max(self.image_inv, 1), title= title, ordinate = 'Z', ascisse = 'Y', 
+                           scale_ord = depth_z, scale_asc = 0.65e-6 )  
+                
+        elif self.params['plot_mode'] == 'stack':
             
             if self.params['plot_view'] == 0:   #xy
                 title= f"Inverted image XY (base: {self.params['base']})"
@@ -513,7 +524,7 @@ class basic_app(coherentSVIM_analysis):
         # dmdPx_to_sample_ratio = 1.247 # (um/px)
         depth_z = (self.ls_analyser.ROI_s_z * 1.247e-6 / self.ls_analyser.image.shape[0] )
         
-        if self.ls_analyser.params['plot_sum']:
+        if self.ls_analyser.params['plot_mode']:
             
             if self.ls_analyser.params['plot_view'] == 0:   #xy
                 title= f"Light Sheet Volume: XY SUM"

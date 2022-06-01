@@ -24,7 +24,12 @@ class coherent_SVIM_App(BaseMicroscopeApp):
         
         from smSVIM_Microscope.coherentSVIM_Measurement import coherentSvimMeasurement
         self.add_measurement(coherentSvimMeasurement(self))
+        
+        from smSVIM_Microscope.coherentSVIM_Hadamard_Measurement import coherentSvim_Hadamard_Measurement
+        self.add_measurement(coherentSvim_Hadamard_Measurement(self))
        
+        from smSVIM_Microscope.dmd_light_sheet_Measurement import DMD_light_sheet_measurement
+        self.add_measurement(DMD_light_sheet_measurement(self))
         
         
         self.ui.show()
@@ -40,9 +45,9 @@ if __name__ == '__main__':
     
     
     ################## for debugging only ##############
-    #app.settings_load_ini(".\\settings\\settings0.ini")
-    for hc_name, hc in app.hardware.items():
-        hc.settings['connected'] = True
+    # app.settings_load_ini(".\\settings\\settings0.ini")
+    # for hc_name, hc in app.hardware.items():
+    #     hc.settings['connected'] = True
     ####################################################    
         
     sys.exit(app.exec_())
