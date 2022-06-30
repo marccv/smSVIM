@@ -57,7 +57,7 @@ class BaseSvimMeasurement(Measurement):
     name = "SVIM"
     
     def calculate_num_frames(self):
-        return 70
+        return 64
     
     
     def calculate_time_frames_n(self):
@@ -339,6 +339,11 @@ class BaseSvimMeasurement(Measurement):
             time_index += 1 
             print(f' --- Volume acqusition number {time_index + 1} ---')
             
+            
+            # specific iteration settings, e.g. selection of basis subset
+            
+            self.run_iteration_settings(time_index)
+            
             # Set trigger to external
     
             self.camera.hamamatsu.setTriggerSource("external")
@@ -408,8 +413,19 @@ class BaseSvimMeasurement(Measurement):
                     print(frame_index)
                 
                     if self.interrupt_measurement_called:
-                        break    
-       
+                        self.camera.hamamatsu.stopAcquisition()
+                        self.camera.hamamatsu.setTriggerSource("internal")
+                        self.camera.hamamatsu.setTriggerMode("normal")
+                        self.camera.hamamatsu.setTriggerPolarity("positive")
+                        self.camera.hamamatsu.setTriggerActive("edge")
+                        print('\nTrigger set to internal')
+                        self.shutter_hw.shutter.close_shutter()
+                        break  
+                    
+                if self.interrupt_measurement_called:
+                    break 
+            
+            
             #=====================================
             # Shutter close
             #=====================================
@@ -436,6 +452,7 @@ class BaseSvimMeasurement(Measurement):
             self.camera.hamamatsu.setTriggerActive("edge")
             print('\nTrigger set to internal')
             
+            
             #=====================================
             # exit conditions
             #=====================================
@@ -453,10 +470,14 @@ class BaseSvimMeasurement(Measurement):
                     self.shutter_hw.shutter.close_shutter()
                     print(f'\nShutter closed. Opened for {time.time() - t_shutter_open:.3f} s')
                     break
+              
+            if self.interrupt_measurement_called:
+                self.shutter_hw.shutter.close_shutter()
+                print('\n\n>> MEASUREMENT INTERRUPTED <<\n\n')
+                break
                 
                 
         # out of for loop
-        self.h5_group.attrs['measure_duration'] = time_end_of_frame
         self.h5file.close()     
         
         
@@ -468,8 +489,8 @@ class BaseSvimMeasurement(Measurement):
         pass
  
     
- 
-    
+    def run_iteration_settings(self, **args):
+        pass
  
     def initH5(self):
         

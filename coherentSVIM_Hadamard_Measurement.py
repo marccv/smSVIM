@@ -106,12 +106,15 @@ class coherentSvim_Hadamard_Measurement(BaseSvimMeasurement):
         else:
             self.settings['num_frames']  =(1 + self.settings['PosNeg']) * had_pat_num
             
+            if hasattr(self, 'time_frames_n'):
+                self.settings['time_frames_n'] = self.calculate_time_frames_n()
+            
          
   
         
     def setup_svim_mode_settings(self):
         
-        self.had_pat_num = self.settings.New('had_pat_num', dtype=int, initial=32 , vmin = 1 )
+        self.had_pat_num = self.settings.New('had_pat_num', dtype=int, initial=64 , vmin = 1 )
         self.had_pat_num.hardware_set_func = self.set_had_pat_num
         
         
@@ -137,4 +140,25 @@ class coherentSvim_Hadamard_Measurement(BaseSvimMeasurement):
         return images
         
                 
+    def run_iteration_settings(self, time_index):
+        
+        
+        sequence = [1,2,3] # random(?) subset of hadamard patterns to use in the current time frame
+        
+        if self.settings['PosNeg'] == True:
+            
+            temp = []
+            for i in sequence:
+                temp.append(i*2-1)
+                temp.append(i*2)
+                
+            sequence = temp
+        
+        repeatnum = len(sequence)
+        
+        
+        self.dmd_hw.dmd.reorderlut(sequence, repeatnum)
+        
+        
+        
     

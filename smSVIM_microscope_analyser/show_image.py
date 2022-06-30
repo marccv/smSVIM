@@ -7,6 +7,7 @@ Created on Thu May 26 19:39:16 2022
 """
 
 import pyqtgraph as pg
+# import cmap as cm
 
 
 
@@ -39,6 +40,12 @@ def show_image(image,  **kwargs):
     w = pg.ImageView(view = plot)
     img = w.getImageItem()
     tlabel = pg.InfLineLabel(w.timeLine, text="{value:.0f}")
+    
+    # cmap = cm.getFromMatplotlib('inferno') # prepare a linear color map
+    # bar = pg.ColorBarItem( cmap=cm ) # prepare interactive color bar
+    # # Have ColorBarItem control colors of img and appear in 'plot':
+    # bar.setImageItem( img, insert_in=plot )
+    # img.setColorMap(cmap)
     
     windowTitle = kwargs.pop("title", "ImageView")
     w.setWindowTitle(windowTitle)

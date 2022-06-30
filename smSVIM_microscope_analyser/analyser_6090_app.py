@@ -37,12 +37,12 @@ class basic_app(coherentSVIM_analysis):
         
     def setup(self):
         
-        self.ui_filename = '/Users/marcovitali/Documents/Poli/tesi/ScopeFoundy/coherentSVIM/smSVIM_microscope_analyser/analyser_6090_tabs.ui'
+        self.ui_filename = '/Users/marcovitali/Documents/Poli/tesi/coherentSVIM/smSVIM_microscope_analyser/analyser_6090_tabs.ui'
         self.ui = uic.loadUi(self.ui_filename)
         
         # file path and load
         
-        self.file_path = '/Users/marcovitali/Documents/Poli/tesi/ScopeFoundy/coherentSVIM/data'
+        self.file_path = '/Users/marcovitali/Documents/Poli/tesi/coherentSVIM/data'
         self.ui.pushButton_file_browser.clicked.connect(self.file_browser)
         self.ui.pushButton_load_dataset.clicked.connect(self.load_file_path)
         

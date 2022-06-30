@@ -86,7 +86,7 @@ class coherentSVIM_analysis:
     def load_h5_file(self, dataset_index = 0):
         
         self.imageRaw = get_h5_dataset(self.file_path, max(0,dataset_index)) 
-
+        print(type(self.imageRaw[0,0,0]))
     
     def show_im_raw(self):
                 
@@ -123,6 +123,7 @@ class coherentSVIM_analysis:
         neg = self.imageRaw[np.linspace(1, num_frames -1, int(num_frames/2), dtype = 'int'), :, :]
         
         self.imageRaw = pos - neg
+        print(type(self.imageRaw[0,0,0]))
     
     @time_it
     def setROI(self, **kwargs):
@@ -231,6 +232,7 @@ class coherentSVIM_analysis:
         
         self.denoised = False
         self.clipped = False
+        print(type(self.imageRaw[0,0,0]))
     
     
     @time_it
@@ -651,7 +653,7 @@ if __name__ == "__main__" :
         # file_name = '/Users/marcovitali/Documents/Poli/tesi/ScopeFoundy/coherentSVIM/data/220523_cuma_fluo_test/220523_113501_DMD_light_sheet_no_diff_300ul_transp_6px_posneg.h5'
         
         # file_name = '/Users/marcovitali/Documents/Poli/tesi/ScopeFoundy/coherentSVIM/data/220523_cuma_fluo_test/220523_110615_coherent_SVIM_diff_300ul_transp.h5'
-        file_name = '/Users/marcovitali/Documents/Poli/tesi/ScopeFoundy/coherentSVIM/data/220523_cuma_fluo_test/220523_113202_coherent_SVIM_no_diff_300ul_transp.h5'
+        file_name = '/Users/marcovitali/Documents/Poli/tesi/coherentSVIM/data/220523_cuma_fluo_test/220523_113202_coherent_SVIM_no_diff_300ul_transp.h5'
         
         
         dataset = coherentSVIM_analysis(file_name)
@@ -666,7 +668,7 @@ if __name__ == "__main__" :
 
         # dataset.show_im_raw()
         
-        # dataset.choose_freq() # also removes any duplicate in frequency
+        dataset.choose_freq() # also removes any duplicate in frequency
         
         #%% invert the raw image
         
@@ -678,14 +680,15 @@ if __name__ == "__main__" :
         lsqr_niter = 5
         lsqr_damp = 1e-4
         
-        # dataset.p_invert(base = base)
+        dataset.p_invert(base = base)
         
         # dataset.invert_and_denoise1D_no_for(base = base, lamda = lamda, niter_out = niter_out,
                                 # niter_in = niter_in, lsqr_niter = lsqr_niter, lsqr_damp = lsqr_damp)
         # invert_and_denoise3D_v2(base = base, lamda = lamda, niter_out = niter_out,
                                 # niter_in = niter_in, lsqr_niter = lsqr_niter, lsqr_damp = lsqr_damp)
         
-        dataset.show_inverted()
+        
+        # dataset.show_inverted()
         
         # dataset.show_inverted_xy()
         # dataset.show_inverted_xz()

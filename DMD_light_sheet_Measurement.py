@@ -123,11 +123,10 @@ class DMD_light_sheet_measurement(BaseSvimMeasurement):
                 images = []
                 im_pos = create_light_sheets(ROI_size , self.settings['sheet_width'], transpose_pattern)
                 
-                mask = self.create_rectangle_mask(ROI_size)
                 
                 for im in im_pos:
                     images.append(im)
                     im_neg = np.uint8(np.logical_not(im)*1)
-                    images.append(im_neg*mask)
+                    images.append(im_neg)
                         
             return images
