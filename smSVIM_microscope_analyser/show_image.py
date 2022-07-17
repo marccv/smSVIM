@@ -28,7 +28,7 @@ def show_image(image,  **kwargs):
         show_params[key] = val
     
     
-    app = pg.mkQApp()
+    # app = pg.mkQApp()
     plot = pg.PlotItem()
     
     ordinate_text = f'<strong style="font-size: 20px;">{show_params["ordinate"]} axis</strong>'
@@ -50,7 +50,7 @@ def show_image(image,  **kwargs):
     windowTitle = kwargs.pop("title", "ImageView")
     w.setWindowTitle(windowTitle)
     w.setImage(image, scale = (show_params["scale_ord"], show_params["scale_asc"]), pos = (0, 0))
-    images.append(w)
+    # images.append(w)
     w.show()
     
     

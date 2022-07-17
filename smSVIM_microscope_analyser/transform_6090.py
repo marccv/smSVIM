@@ -8,6 +8,8 @@ Created on Mon Apr 25 15:04:40 2022
 
 import numpy as np
 import matplotlib.pyplot as plt
+from scipy.linalg import hadamard
+from numpy import genfromtxt
 plt.rcParams['figure.dpi'] = 300
 plt.rcParams.update({'font.size': 10})
     
@@ -60,6 +62,8 @@ class dct_6090:
         # for i in range(4):
         #     ax1.plot(self.x, self.matrix[i,:] + 0.08*i, '-o')
         
+
+        
     def compute_inverse(self):
         
         #condition number
@@ -83,8 +87,49 @@ class dct_6090:
         
         self.pinv_matrix = np.linalg.pinv(self.matrix, rcond = rcond_pinv)
         
+        
+        
+        
+# =============================================================================
+#         hadamard
+# =============================================================================
+        
+def create_hadamard_matrix(num_of_patterns, had_type = 'hadam'):
+    
+    if had_type == 'hadam':
+        return hadamard(num_of_patterns)
+    
+    elif had_type == 'walsh':
+        return genfromtxt(f'/Users/marcovitali/Documents/Poli/tesi/coherentSVIM/hadamard/wh{num_of_patterns}.csv', delimiter=',')
+    
+    elif had_type == 'scrambled':
+        np.random.seed(222)
+        
+        I = np.eye(num_of_patterns)
+        Pr = I[np.random.permutation(num_of_patterns), :]
+        Pc = I[np.random.permutation(num_of_patterns), :]
+        
+        return Pr @ hadamard(num_of_patterns) @ Pc
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
     
 # =====================================================================================
+#          main
 # =====================================================================================
 
 if __name__ == '__main__':

@@ -65,7 +65,7 @@ class BaseSvimMeasurement(Measurement):
         if not self.settings['time_lapse']:
             return int(1)
         else:
-            delay = not self.settings['keep_shutter_open'] * 0.3 +  0.3  # 0.3s is the trigger dead time we set, 0.3 is an empirical dead computational time
+            delay = (not self.settings['keep_shutter_open']) * 0.3 +  0.3  # 0.3s is the trigger dead time we set, 0.3 is an empirical dead computational time
             return int(np.ceil( self.settings['obs_time'] / ( (self.settings['num_frames']/self.settings['effective_fps']) + self.settings['dark_time'] + delay ) ))  
      
     
@@ -103,7 +103,7 @@ class BaseSvimMeasurement(Measurement):
         
         read_one_line = 9.74436 #(us)
         delay =  9 * read_one_line #(us)
-        contingency = 0.008
+        contingency = 0.04
         self.eff_subarrayv = int(self.camera.subarrayv.val/self.camera.binning.val)
         
         return (1 + contingency) * (delay + (self.eff_subarrayv/2) * read_one_line) *1e-3 #(ms)
@@ -140,6 +140,7 @@ class BaseSvimMeasurement(Measurement):
         
         if hasattr(self, 'time_frames_n'):
             self.settings['time_frames_n'] = self.calculate_time_frames_n()
+    
     def set_keep_shutter_open(self, keep_shutter_open):
         
         if hasattr(self, 'time_frames_n'):
@@ -275,7 +276,7 @@ class BaseSvimMeasurement(Measurement):
         exposure_dmd = [int(exposure*1e3 + self.settings['edge_trigger_margin']*1e3) ]*num_frames
         self.settings['effective_fps'] =  self.calculate_eff_fps()
         
-        # I tell the camera how manìy frames to record
+        # I tell the camera how many frames to record
         self.camera.settings['number_frames'] = num_frames
         self.camera.settings['exposure_time'] = exposure*1e-3
         
@@ -328,7 +329,7 @@ class BaseSvimMeasurement(Measurement):
         self.initH5()
         
         if self.settings['time_lapse'] == True:
-            self.settings['keep_shutter_open'] == False
+            print('Keep shutter open: ',self.settings['keep_shutter_open'])
 
         # while loop for time laps
         time_index = -1
@@ -339,10 +340,9 @@ class BaseSvimMeasurement(Measurement):
             time_index += 1 
             print(f' --- Volume acqusition number {time_index + 1} ---')
             
-            
             # specific iteration settings, e.g. selection of basis subset
-            
-            self.run_iteration_settings(time_index)
+            # if time_index > 0:
+            #     self.run_iteration_settings(time_index)
             
             # Set trigger to external
     
@@ -478,6 +478,7 @@ class BaseSvimMeasurement(Measurement):
                 
                 
         # out of for loop
+        self.h5_group.attrs['real_time_frames_n'] = time_index + 1
         self.h5file.close()     
         
         
@@ -488,10 +489,10 @@ class BaseSvimMeasurement(Measurement):
     def run_svim_mode_function(self):
         pass
  
-    
-    def run_iteration_settings(self, **args):
-        pass
+    # def run_iteration_settings(self, **args):
+    #     pass
  
+    
     def initH5(self):
         
         def create_saving_directory():

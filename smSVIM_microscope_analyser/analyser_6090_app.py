@@ -58,7 +58,7 @@ class basic_app(coherentSVIM_analysis):
         
         self.ui.tabs.setCurrentWidget(self.ui.tab_coherent)
         
-        self.bases = ['cos', 'sq', 'hadam']
+        self.bases = ['cos', 'sq', 'hadam', 'walsh', 'scrambled']
         
         # select ROI
         
@@ -99,8 +99,12 @@ class basic_app(coherentSVIM_analysis):
         
         
         
-        # time lapse section
+        # invert complete time lapse
+        self.ui.invert_and_save_complete_tl.clicked.connect(self.invert_and_save_complete_tl_app)
+        
+        # time lapse process
         self.time_lapse_modes = ['max','ave', 'plane']
+        
         def change_tl_mode():
             if self.ui.comboBox_time_lapse_mode.currentIndex() != 2:
                 self.ui.label_tl_plane.setEnabled(False)
@@ -115,6 +119,8 @@ class basic_app(coherentSVIM_analysis):
         self.ui.pushButton_save_inverted_time_lapse.clicked.connect(self.save_time_lapse_app)
         self.ui.pushButton_show_time_lapse.clicked.connect(self.show_time_lapse)
         
+        
+        # status label
         self.ui.label_status.setText('Please load dataset')
         
         
@@ -182,6 +188,10 @@ class basic_app(coherentSVIM_analysis):
     def _gather_params(self):
         
         params_from_ui = {'base': self.bases[self.ui.comboBox_base.currentIndex()],
+                          'pixel_size': self.ui.doubleSpinBox_pixel_size.value(), #pixel size in (um/px)
+                          'dmd_to_sample_ratio': self.ui.doubleSpinBox_dmd_to_sample.value(), #dmd pixel to sample ratio (um/px)
+                          'dark_counts': self.ui.doubleSpinBox_dark_counts.value(),
+                          'PosNeg': self.PosNeg,
                           'select_ROI': self.ui.checkBox_select_ROI.isChecked(),
                           'apply_denoise': self.ui.checkBox_denoise.isChecked(),
                           'X0': self.ui.spinBox_x0.value(),
@@ -246,12 +256,19 @@ class basic_app(coherentSVIM_analysis):
         self.file_path = self.new_file_path
         
         try:
-            self.time_lapse = get_h5_attr(self.file_path, 'time_laps')[0] #TODO correct LAPS
+            self.time_lapse = get_h5_attr(self.file_path, 'time_lapse')[0] #TODO correct LAPS
         except:
             self.time_lapse = False
         try:
-            self.params['time_frames_n'] = get_h5_attr(self.file_path, 'time_frames_n')[0]
-            self.ui.spinBox_t_frame_index.setMaximum(self.params['time_frames_n'] -1)
+            
+            
+            
+            try:
+                self.params['time_frames_n'] = get_h5_attr(self.file_path, 'real_time_frames_n')[0]
+                self.ui.spinBox_t_frame_index.setMaximum(self.params['time_frames_n'] -1)
+            except:
+                self.params['time_frames_n'] = get_h5_attr(self.file_path, 'time_frames_n')[0]
+                self.ui.spinBox_t_frame_index.setMaximum(self.params['time_frames_n'] -1)
         except:
             self.params['time_frames_n'] = None
             
@@ -276,8 +293,18 @@ class basic_app(coherentSVIM_analysis):
             if self.new_file_path.find('Hadamard') != -1:
                 self.ui.comboBox_base.setCurrentIndex(2)
                 
+                try:
+                    had_type = get_h5_attr(self.file_path, 'had_type')[0]
+                except:
+                    pass
+                else:
+                    if had_type.find('walsh') != -1:
+                        self.ui.comboBox_base.setCurrentIndex(3)
+                    elif had_type.find('scrambled') != -1:
+                        self.ui.comboBox_base.setCurrentIndex(4)
+                
             
-            # init
+            # init of coherentSVIM_analysis
             super().__init__(self.new_file_path, **self._gather_params())
             
             # enable 
@@ -309,6 +336,16 @@ class basic_app(coherentSVIM_analysis):
                 self.ui.radioButton_xz.setEnabled(True)
                 self.ui.radioButton_yz.setEnabled(True)
                 self.ui.pushButton_invert_time_lapse.setEnabled(True)
+            else:
+                self.ui.groupBox_time_lapse.setEnabled(False)
+                self.ui.label_t_frame_index.setEnabled(False)
+                self.ui.spinBox_t_frame_index.setEnabled(False)
+                self.ui.comboBox_time_lapse_mode.setEnabled(False)
+                self.ui.label_tlview.setEnabled(False)
+                self.ui.radioButton_xy.setEnabled(False)
+                self.ui.radioButton_xz.setEnabled(False)
+                self.ui.radioButton_yz.setEnabled(False)
+                self.ui.pushButton_invert_time_lapse.setEnabled(False)
                 
                 
                 
@@ -374,16 +411,13 @@ class basic_app(coherentSVIM_analysis):
         if not self.denoise:
             # try:
                 
-            if self.params['base'] != 'hadam':
-                self.choose_freq()
-                self.p_invert()
+            if self.params['base'] != 'hadam' or not self.params['PosNeg']:
+                self.lsqr_invert()
             else:
                 self.invert()
-            # except:
-                # print('Could not invert')
                     
         else:
-            if self.params['base'] != 'hadam':
+            if self.params['base'] == 'cos' or self.params['base'] == 'sq':
                 self.choose_freq()
                 
             self.invert_and_denoise3D_v2()  
@@ -416,63 +450,69 @@ class basic_app(coherentSVIM_analysis):
         
         self.update_params()
         
-        # dmdPx_to_sample_ratio = 1.247 # (um/px)
-        depth_z = (self.ROI_s_z * 1.247e-6 / self.image_inv.shape[0] )
+        depth_z = (self.ROI_s_z * self.params['dmd_to_sample_ratio'] / self.image_inv.shape[0] ) *1e-6 #(m/px)
+        width_xy = self.params['pixel_size']*1e-6  #(m/px)
         
         if self.params['plot_mode'] == 'ave':
             
             if self.params['plot_view'] == 0:   #xy
                 title= f"Inverted image XY AVERAGE (base: {self.params['base']})"
                 show_image(np.mean(self.image_inv, 0), title= title, ordinate = 'X', ascisse = 'Y', 
-                           scale_ord = 0.65e-6, scale_asc = 0.65e-6)  
+                           scale_ord = width_xy, scale_asc = width_xy)  
                 
             elif self.params['plot_view'] == 1: #xz
                 title= f"Inverted image XZ AVERAGE (base: {self.params['base']})"
                 show_image(np.mean(self.image_inv, 2).transpose(), title= title, ordinate = 'X', ascisse = 'Z', 
-                           scale_ord = 0.65e-6, scale_asc = depth_z )  
+                           scale_ord = width_xy, scale_asc = depth_z )  
                 
             elif self.params['plot_view'] == 2: #yz
                 title= f"Inverted image YZ AVERAGE (base: {self.params['base']})"
                 show_image(np.mean(self.image_inv, 1), title= title, ordinate = 'Z', ascisse = 'Y', 
-                           scale_ord = depth_z, scale_asc = 0.65e-6 )  
+                           scale_ord = depth_z, scale_asc = width_xy )  
                 
         if self.params['plot_mode'] == 'max':
             
             if self.params['plot_view'] == 0:   #xy
                 title= f"Inverted image XY MAX (base: {self.params['base']})"
                 show_image(np.max(self.image_inv, 0), title= title, ordinate = 'X', ascisse = 'Y', 
-                           scale_ord = 0.65e-6, scale_asc = 0.65e-6)  
+                           scale_ord = width_xy, scale_asc = width_xy)  
                 
             elif self.params['plot_view'] == 1: #xz
                 title= f"Inverted image XZ MAX (base: {self.params['base']})"
                 show_image(np.max(self.image_inv, 2).transpose(), title= title, ordinate = 'X', ascisse = 'Z', 
-                           scale_ord = 0.65e-6, scale_asc = depth_z )  
+                           scale_ord = width_xy, scale_asc = depth_z )  
                 
             elif self.params['plot_view'] == 2: #yz
                 title= f"Inverted image YZ MAX (base: {self.params['base']})"
                 show_image(np.max(self.image_inv, 1), title= title, ordinate = 'Z', ascisse = 'Y', 
-                           scale_ord = depth_z, scale_asc = 0.65e-6 )  
+                           scale_ord = depth_z, scale_asc = width_xy )  
                 
         elif self.params['plot_mode'] == 'stack':
             
             if self.params['plot_view'] == 0:   #xy
                 title= f"Inverted image XY (base: {self.params['base']})"
                 show_image(self.image_inv, title= title, ordinate = 'X', ascisse = 'Y', 
-                           scale_ord = 0.65e-6, scale_asc = 0.65e-6)  
+                           scale_ord = width_xy, scale_asc = width_xy)  
                 
             elif self.params['plot_view'] == 1: #xz
                 title= f"Inverted image XZ (base: {self.params['base']})"
                 show_image(self.image_inv.transpose(2,1,0), title= title, ordinate = 'X', ascisse = 'Z', 
-                           scale_ord = 0.65e-6, scale_asc = depth_z )  
+                           scale_ord = width_xy, scale_asc = depth_z )  
                 
             elif self.params['plot_view'] == 2: #yz
                 title= f"Inverted image YZ (base: {self.params['base']})"
                 show_image(self.image_inv.transpose(1,0,2), title= title, ordinate = 'Z', ascisse = 'Y', 
-                           scale_ord = depth_z, scale_asc = 0.65e-6 ) 
+                           scale_ord = depth_z, scale_asc = width_xy ) 
                 
         # show_image(image, title)      
     
         
+    def invert_and_save_complete_tl_app(self):
+        
+        self.update_params()
+        self.invert_and_save_complete_tl()
+        self.ui.label_status.setText('Time Lapse inversion completed')
+    
     def invert_tl_app(self):
         
         self.update_params()
@@ -521,42 +561,42 @@ class basic_app(coherentSVIM_analysis):
             if self.select_ROI_ls : self.ls_analyser.setROI()
         
         
-        # dmdPx_to_sample_ratio = 1.247 # (um/px)
-        depth_z = (self.ls_analyser.ROI_s_z * 1.247e-6 / self.ls_analyser.image.shape[0] )
+        depth_z = (self.ROI_s_z * self.params['dmd_to_sample_ratio'] / self.image_inv.shape[0] ) *1e-6 #(m/px)
+        width_xy = self.params['pixel_size']*1e-6  #(m/px)
         
         if self.ls_analyser.params['plot_mode']:
             
             if self.ls_analyser.params['plot_view'] == 0:   #xy
-                title= f"Light Sheet Volume: XY SUM"
+                title= "Light Sheet Volume: XY SUM"
                 show_image(np.sum(self.ls_analyser.image, 0), title= title, ordinate = 'X', ascisse = 'Y', 
-                           scale_ord = 0.65e-6, scale_asc = 0.65e-6)  
+                           scale_ord = width_xy, scale_asc = width_xy)  
                 
             elif self.ls_analyser.params['plot_view'] == 1: #xz
-                title= f"Light Sheet Volume: XZ SUM"
+                title= "Light Sheet Volume: XZ SUM"
                 show_image(np.sum(self.ls_analyser.image, 2).transpose(), title= title, ordinate = 'X', ascisse = 'Z', 
-                           scale_ord = 0.65e-6, scale_asc = depth_z )  
+                           scale_ord = width_xy, scale_asc = depth_z )  
                 
             elif self.ls_analyser.params['plot_view'] == 2: #yz
-                title= f"Light Sheet Volume: YZ SUM"
+                title= "Light Sheet Volume: YZ SUM"
                 show_image(np.sum(self.ls_analyser.image, 1), title= title, ordinate = 'Z', ascisse = 'Y', 
-                           scale_ord = depth_z, scale_asc = 0.65e-6 )  
+                           scale_ord = depth_z, scale_asc = width_xy )  
                 
         else:
             
             if self.ls_analyser.params['plot_view'] == 0:   #xy
                 title= f"Light Sheet Volume: XY"
                 show_image(self.ls_analyser.image, title= title, ordinate = 'X', ascisse = 'Y', 
-                           scale_ord = 0.65e-6, scale_asc = 0.65e-6)  
+                           scale_ord = width_xy, scale_asc = width_xy)  
                 
             elif self.ls_analyser.params['plot_view'] == 1: #xz
                 title= f"Light Sheet Volume: XZ"
                 show_image(self.ls_analyser.image.transpose(2,1,0), title= title, ordinate = 'X', ascisse = 'Z', 
-                           scale_ord = 0.65e-6, scale_asc = depth_z )  
+                           scale_ord = width_xy, scale_asc = depth_z )  
                 
             elif self.ls_analyser.params['plot_view'] == 2: #yz
                 title= f"Light Sheet Volume: YZ"
                 show_image(self.ls_analyser.image.transpose(1,0,2), title= title, ordinate = 'Z', ascisse = 'Y', 
-                           scale_ord = depth_z, scale_asc = 0.65e-6 ) 
+                           scale_ord = depth_z, scale_asc = width_xy ) 
                 
         
     def invert_tl_ls_app(self):

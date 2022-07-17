@@ -16,7 +16,7 @@ from scipy.linalg import hadamard
 
 
 
-def create_hadamard_patterns(num_of_patterns = 32, transpose_pattern=False, cropped_field_size = [256, 512],
+def create_hadamard_patterns(num_of_patterns = 32, scrambled = False ,transpose_pattern=False, cropped_field_size = [256, 512],
                              im_size = [1080, 1920]):
     
     s_y = im_size[0]
@@ -27,6 +27,11 @@ def create_hadamard_patterns(num_of_patterns = 32, transpose_pattern=False, crop
     s_anti = cropped_field_size[1] #dimension of the border parallel to the antidiagonal direction  
 
     H = hadamard(num_of_patterns)
+    
+    if scrambled == True:
+        H = H # insert here the permutations
+    
+    
     H[H<0] = 0 # the DMD only accepts 0 and 1, so to create the real pattern I will have to operate in PosNeg mode
     
     images = []
@@ -117,7 +122,9 @@ class coherentSvim_Hadamard_Measurement(BaseSvimMeasurement):
         self.had_pat_num = self.settings.New('had_pat_num', dtype=int, initial=64 , vmin = 1 )
         self.had_pat_num.hardware_set_func = self.set_had_pat_num
         
-        
+        # self.settings.New('reorder_test', dtype = bool, initial = True )
+        self.settings.New('walsh_order', dtype = bool, initial = False)
+        self.settings.New('scrambled', dtype = bool, initial = False)
    
     def run_svim_mode_function(self):
         transpose_pattern = self.settings['transpose_pattern']
@@ -126,12 +133,12 @@ class coherentSvim_Hadamard_Measurement(BaseSvimMeasurement):
             
         if self.settings['PosNeg'] == False:
               
-            images = create_hadamard_patterns( self.settings['had_pat_num'], transpose_pattern, cropped_field_size )
+            images = create_hadamard_patterns( self.settings['had_pat_num'], self.settings['scrambled'], transpose_pattern, cropped_field_size )
         
         else:
             #PosNeg
             images = []
-            im_pos = create_hadamard_patterns( self.settings['had_pat_num'], transpose_pattern, cropped_field_size )
+            im_pos = create_hadamard_patterns( self.settings['had_pat_num'], self.settings['scrambled'], transpose_pattern, cropped_field_size )
                     
             for im in im_pos:
                 images.append(im)
@@ -139,26 +146,27 @@ class coherentSvim_Hadamard_Measurement(BaseSvimMeasurement):
                 images.append(im_neg)
         return images
         
-                
-    def run_iteration_settings(self, time_index):
+    # def run_iteration_settings(self, time_index):
         
-        
-        sequence = [1,2,3] # random(?) subset of hadamard patterns to use in the current time frame
-        
-        if self.settings['PosNeg'] == True:
+    #     if self.settings['reorder_test'] == True:
             
-            temp = []
-            for i in sequence:
-                temp.append(i*2-1)
-                temp.append(i*2)
+    #         sequence = [2,1] # random(?) subset of hadamard patterns to use in the current time frame
+            
+    #         if self.settings['PosNeg'] == True:
                 
-            sequence = temp
+    #             temp = []
+    #             for i in sequence:
+    #                 temp.append(i*2-1)
+    #                 temp.append(i*2)
+                    
+    #             sequence = temp
+            
+    #         repeatnum = len(sequence)
+            
+            
+            # self.dmd_hw.dmd.reorderlut(sequence, repeatnum)  
+            # self.camera.settings['number_frames'] = int(len(sequence))
+
+
+
         
-        repeatnum = len(sequence)
-        
-        
-        self.dmd_hw.dmd.reorderlut(sequence, repeatnum)
-        
-        
-        
-    

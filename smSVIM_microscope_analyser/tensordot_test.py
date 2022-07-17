@@ -115,4 +115,28 @@ A = LinearOperator((nx*ny*nz,nx*ny*nz), matvec = Op, dtype = float)
 Op_s = pylops.LinearOperator(M)
 
 
+#%%
+
+import numpy as np
+from scipy.linalg import hadamard
+from numpy.linalg import lstsq
+
+rawim = np.array([[[1,2],[3,4]], [[5,6],[7,8]], [[9,10], [11,12]]])
+print(rawim)
+
+
+M  = hadamard(4, dtype = float)
+
+Nz = 3
+nz,ny,nx = rawim.shape
+
+rawim_res = rawim.reshape( Nz, int(nz*ny*nx/Nz))
+
+print(rawim_res)
+
+inv,_,_,_ = lstsq(M[:-1, :-1], rawim_res, rcond = None)
+
+
+
+
 

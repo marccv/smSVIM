@@ -10,7 +10,6 @@ Created on Fri Apr 22 15:25:23 2022
 import numpy as np
 import transform_6090 as t_6090
 import scipy.fftpack as sp_fft
-from scipy.linalg import hadamard
 from get_h5_data import get_h5_dataset, get_h5_attr
 import tifffile as tiff
 import time
@@ -23,6 +22,8 @@ plt.rcParams.update({'font.size': 9})
 import pylops
 # from scipy.sparse.linalg import aslinearoperator
 from scipy.sparse.linalg import LinearOperator
+from scipy.optimize import least_squares
+from numpy.linalg import lstsq
 
 import sys
 import os
@@ -48,6 +49,8 @@ def time_it(method):
     return inner
 
 
+
+
 class coherentSVIM_analysis:
     
     name = 'coherentSVIM_analysis'
@@ -55,7 +58,11 @@ class coherentSVIM_analysis:
     def __init__(self, fname, **kwargs ):
         
         #default values
-        self.params = {'base': 'cos',
+        self.params = {'base': 'hadam',
+                       'pixel_size': 0.325, #(um/px)
+                       'dmd_to_sample_ratio': 1.195, #(um/px)
+                       'dark_counts': 100,
+                       'PosNeg': True,
                        'select_ROI': False,
                        'denoise' : False,
                        'X0': 0,
@@ -86,7 +93,7 @@ class coherentSVIM_analysis:
     def load_h5_file(self, dataset_index = 0):
         
         self.imageRaw = get_h5_dataset(self.file_path, max(0,dataset_index)) 
-        print(type(self.imageRaw[0,0,0]))
+
     
     def show_im_raw(self):
                 
@@ -123,7 +130,13 @@ class coherentSVIM_analysis:
         neg = self.imageRaw[np.linspace(1, num_frames -1, int(num_frames/2), dtype = 'int'), :, :]
         
         self.imageRaw = pos - neg
-        print(type(self.imageRaw[0,0,0]))
+        
+        
+        
+    @time_it
+    def make_it_pos_neg(self):
+        
+        self.imageRaw = self.imageRaw * 2 - self.imageRaw[0,:,:] #TODO: this does not work for scrambled hadamard where the continuos component is not the first pattern
     
     @time_it
     def setROI(self, **kwargs):
@@ -167,6 +180,9 @@ class coherentSVIM_analysis:
         # self.imageRaw = self.imageRaw[mask, :, :]
         print(f'image Raw shape: {self.imageRaw.shape}')
         self.disp_freqs = np.array(disp_freqs)[mask]
+        
+        
+        
     
     @time_it    
     def invert(self, **kwargs):
@@ -192,9 +208,12 @@ class coherentSVIM_analysis:
             self.image_inv = np.tensordot(self.transform.inv_matrix ,  self.imageRaw , axes=([1],[0]))
             
         elif self.params['base'] == 'hadam':
+            # normal hadamard matrix is orthogonal
+            
             self.ROI_s_z = get_h5_attr(self.file_path, 'ROI_s_z')[0]
-            self.params['had_pat_num'] = get_h5_attr(self.file_path, 'had_pat_num')[0]
-            inv_matrix = (1/self.params['had_pat_num'])*hadamard(int(self.params['had_pat_num']))
+            self.params['had_pat_num'] = int(get_h5_attr(self.file_path, 'had_pat_num')[0])
+            
+            inv_matrix = (1/self.params['had_pat_num'])*t_6090.create_hadamard_matrix(self.params['had_pat_num'], 'hadam')
             self.image_inv = np.tensordot(inv_matrix ,  self.imageRaw , axes=([1],[0]))
             
         elif self.params['base'] == 'sp_dct':
@@ -206,6 +225,8 @@ class coherentSVIM_analysis:
         
         self.denoised = False
         self.clipped = False
+        
+        
     
     @time_it        
     def p_invert(self,  **kwargs):
@@ -232,8 +253,60 @@ class coherentSVIM_analysis:
         
         self.denoised = False
         self.clipped = False
-        print(type(self.imageRaw[0,0,0]))
     
+    
+    
+    @time_it
+    def lsqr_invert(self, **kwargs):
+        
+        '''
+        Inverts the raw image using least squares methods
+        '''
+        # update any specified parameter
+        for key, val in kwargs.items():
+            self.params[key] = val
+    
+        
+        
+        if self.params['base'] == 'cos':
+            self.choose_freq()
+            self.transform = t_6090.dct_6090(self.disp_freqs)
+            self.transform.create_space()
+            self.transform.create_matrix_cos()
+            matrix = self.transform.matrix
+            
+        elif self.params['base'] == 'sq':
+            self.choose_freq()
+            self.transform = t_6090.dct_6090(self.disp_freqs)
+            self.transform.create_space()
+            self.transform.create_matrix_sq()
+            matrix = self.transform.matrix
+            
+        else:
+            # hadamard type base
+            self.ROI_s_z = get_h5_attr(self.file_path, 'ROI_s_z')[0]
+            self.params['had_pat_num'] = int(get_h5_attr(self.file_path, 'had_pat_num')[0])
+            
+            matrix = t_6090.create_hadamard_matrix(self.params['had_pat_num'], self.params['base'])
+            
+        if not self.params['PosNeg']:
+            matrix[matrix <0] = 0
+            
+            # subtract dark counts
+            self.imageRaw -= self.params['dark_counts']
+    
+        matrix = matrix.astype(float)
+        Nz = matrix.shape[1]
+        nz,ny,nx = self.imageRaw.shape
+        
+        self.image_inv,_,_,_ = lstsq(matrix, self.imageRaw.reshape( nz, int(ny*nx)), rcond = None)
+        
+        # print(type(self.image_inv))
+        
+        self.image_inv = self.image_inv.reshape(Nz,ny,nx)
+        
+        
+        
     
     @time_it
     def denoise(self, weight = 1000):
@@ -277,7 +350,7 @@ class coherentSVIM_analysis:
         elif self.params['base'] == 'hadam':
             self.ROI_s_z = get_h5_attr(self.file_path, 'ROI_s_z')[0]
             self.params['had_pat_num'] = get_h5_attr(self.file_path, 'had_pat_num')[0]
-            M = (1/self.params['had_pat_num'])*hadamard(int(self.params['had_pat_num']))
+            M = t_6090.create_hadamard_matrix(self.params['had_pat_num'], 'hadam')
         
         nz,ny,nx = self.imageRaw.shape
         shape = (nz,ny,nx)
@@ -348,7 +421,7 @@ class coherentSVIM_analysis:
         elif self.params['base'] == 'hadam':
             self.ROI_s_z = get_h5_attr(self.file_path, 'ROI_s_z')[0]
             self.params['had_pat_num'] = get_h5_attr(self.file_path, 'had_pat_num')[0]
-            M = (1/self.params['had_pat_num'])*hadamard(int(self.params['had_pat_num']))
+            M = t_6090.create_hadamard_matrix(self.params['had_pat_num'], 'hadam')
         
         nz,ny,nx = self.imageRaw.shape
         shape = (nz,ny,nx)
@@ -401,6 +474,17 @@ class coherentSVIM_analysis:
         self.clipped = False
     
 
+    
+    
+    
+    
+    
+    
+# =============================================================================
+#     Visualize volumes
+# =============================================================================
+    
+    
     
     
     
@@ -477,8 +561,7 @@ class coherentSVIM_analysis:
         else:
             inverted_xz = self.image_inv[:,:,plane] # to show just one xz plane
         
-        dmdPx_to_sample_ratio = 1.247 # (um/px)
-        aspect_xz = (self.ROI_s_z * dmdPx_to_sample_ratio / self.image_inv.shape[0] )/0.65
+        aspect_xz = (self.ROI_s_z * self.params['dmd_to_sample_ratio'] / self.image_inv.shape[0] )/self.params['pixel_size']
         
         # aspect_xz = 0.5
         
@@ -507,7 +590,7 @@ class coherentSVIM_analysis:
         cbar.ax.set_ylabel('Counts', rotation=270)
     
 
-    # @time_it
+    @time_it
     def save_inverted(self):
         
         try:
@@ -541,13 +624,105 @@ class coherentSVIM_analysis:
             h5dataset.dims[2].label = "x"
             
             self.ROI_s_z = get_h5_attr(self.file_path, 'ROI_s_z')[0]
-            dmdPx_to_sample_ratio = 1.247 # (um/px)
-            z_sample_period = self.ROI_s_z * dmdPx_to_sample_ratio / self.image_inv.shape[0] 
-            h5dataset.attrs['element_size_um'] =  [z_sample_period,0.65,0.65]
+            z_sample_period = self.ROI_s_z * self.params['dmd_to_sample_ratio'] / self.image_inv.shape[0] 
+            h5dataset.attrs['element_size_um'] =  [z_sample_period, self.params['pixel_size'], self.params['pixel_size']]
 
 
         finally:
             parent.close()
+            
+            
+            
+            
+# =============================================================================
+#       Time lapse
+# =============================================================================
+            
+            
+    def invert_and_save_complete_tl(self, **kwargs):
+        for key, val in kwargs.items():
+            self.params[key] = val
+        
+        print(self.params['time_lapse_mode'])
+        
+        
+        try:
+            try:
+                self.params['time_frames_n'] = get_h5_attr(self.file_path, 'real_time_frames_n')[0]
+            except:
+                self.params['time_frames_n'] = get_h5_attr(self.file_path, 'time_frames_n')[0]
+        except:
+            print('>> Warning: Could not find the number of time frames.')
+            
+        else: # if there are no errors
+        
+        
+            # open the H5 file
+        
+            try:
+                head, tail = os.path.split(self.file_path)
+                
+                newpath = self.file_path[:-3] + '_ANALYSED'
+                if not os.path.exists(newpath):
+                    os.makedirs(newpath)
+                
+                
+                fname = os.path.join(newpath, 'time_lapse_inverted_complete.h5')
+                
+                while os.path.exists(fname):
+                    fname = fname[:-3] + '_bis.h5'
+                
+                parent = h5py.File(fname,'w')
+        
+                # create groups
+                analysis_parameters = parent.create_group('analysis_parameters') 
+                
+                for key, val in self.params.items():
+                    analysis_parameters.attrs[key] = val
+         
+                
+                
+            
+                
+                for time_index in range(self.params['time_frames_n']):
+                    
+                    self.load_h5_file(time_index)
+                    
+                    if self.select_ROI: self.setROI()
+                    if self.params['PosNeg'] : self.merge_pos_neg()
+            
+                    if not self.denoise:
+                        # try:
+                            
+                        if self.params['base'] != 'hadam' or not self.params['PosNeg']:
+                            self.lsqr_invert()
+                        else:
+                            self.invert()
+                                
+                    else:
+                        if self.params['base'] == 'cos' or self.params['base'] == 'sq':
+                            self.choose_freq()
+                            
+                        self.invert_and_denoise3D_v2()   
+                        
+                    # create a dataset
+                    name = f't{time_index:04d}/c0000/image'
+                    h5dataset = parent.create_dataset(name = name, shape=self.image_inv.shape, data = self.image_inv)
+                    h5dataset.dims[0].label = "z"
+                    h5dataset.dims[1].label = "y"
+                    h5dataset.dims[2].label = "x"
+                    
+                    
+                    
+                    depth_z = (self.ROI_s_z * self.params['dmd_to_sample_ratio']/ self.image_inv.shape[0] )
+                    h5dataset.attrs['element_size_um'] =  [depth_z, self.params['pixel_size'], self.params['pixel_size']]
+                
+            finally:
+                parent.close()
+            
+                
+       
+            
             
             
     def invert_time_lapse(self, **kwargs):
@@ -556,17 +731,22 @@ class coherentSVIM_analysis:
         for key, val in kwargs.items():
             self.params[key] = val
         
+        print(self.params['time_lapse_mode'])
+        
+        
         if kwargs.get('progress_bar') is not None:
             progress_bar = kwargs.get('progress_bar')
             progress_bar.setValue(0)
         
         try:
-            self.params['time_frames_n'] = get_h5_attr(self.file_path, 'time_frames_n')[0]
-            
+            try:
+                self.params['time_frames_n'] = get_h5_attr(self.file_path, 'real_time_frames_n')[0]
+            except:
+                self.params['time_frames_n'] = get_h5_attr(self.file_path, 'time_frames_n')[0]
         except:
             print('>> Warning: Could not find the number of time frames.')
             
-        else:
+        else: # if there are no errors
                 
             self.tl_stack = []
             
@@ -577,27 +757,87 @@ class coherentSVIM_analysis:
                 if self.select_ROI: self.setROI()
                 
                 self.merge_pos_neg()
-                self.choose_freq() # also removes any duplicate in frequency
+        
+                if not self.denoise:
+                    # try:
+                        
+                    if self.params['base'] != 'hadam':
+                        self.choose_freq()
+                        self.p_invert()
+                    else:
+                        self.invert()
+                    # except:
+                        # print('Could not invert')
                             
-                self.p_invert()
+                else:
+                    if self.params['base'] != 'hadam':
+                        self.choose_freq()
+                        
+                    self.invert_and_denoise3D_v2()  
                 
-                if self.params['time_lapse_mode'] == 'sum':
-                    self.tl_stack.append(np.sum(self.image_inv, self.params['time_lapse_view'])) # view z = 0, y = 1, x = 2
+                        
+            
                 
-                elif self.params['time_lapse_view'] == 0:
-                    self.tl_stack.append(self.image_inv[self.params['time_lapse_plane'],:,:])
-                elif self.params['time_lapse_view'] == 1:
-                    self.tl_stack.append(self.image_inv[:, self.params['time_lapse_plane'],:])
-                elif self.params['time_lapse_view'] == 2:
-                    self.tl_stack.append(self.image_inv[:,:,self.params['time_lapse_plane']])
+                if self.params['time_lapse_mode'] == 'max':
+                    
+                    if self.params['time_lapse_view'] == 0:   #xy
+                        self.tl_stack.append(np.max(self.image_inv, 0))  
+                        
+                    elif self.params['time_lapse_view'] == 1: #xz
+                        self.tl_stack.append(np.max(self.image_inv, 2))  
+                        
+                    elif self.params['time_lapse_view'] == 2: #yz
+                        self.tl_stack.append(np.max(self.image_inv, 1))   
+                    
+                    
+                elif self.params['time_lapse_mode'] == 'ave':
+                    if self.params['time_lapse_view'] == 0:   #xy
+                        self.tl_stack.append(np.mean(self.image_inv, 0))  
+                        
+                    elif self.params['time_lapse_view'] == 1: #xz
+                        self.tl_stack.append(np.mean(self.image_inv, 2))  
+                        
+                    elif self.params['time_lapse_view'] == 2: #yz
+                        self.tl_stack.append(np.mean(self.image_inv, 1)) 
+                    
+                elif self.params['time_lapse_mode'] == 'plane':
+                
+                
+                    if self.params['time_lapse_view'] == 0:
+                        self.tl_stack.append(self.image_inv[self.params['time_lapse_plane'],:,:])
+                    elif self.params['time_lapse_view'] == 1:
+                        self.tl_stack.append(self.image_inv[:, self.params['time_lapse_plane'],:])
+                    elif self.params['time_lapse_view'] == 2:
+                        self.tl_stack.append(self.image_inv[:,:,self.params['time_lapse_plane']])
             
             self.tl_stack = np.array(self.tl_stack)
        
             
         
     def show_time_lapse(self):
+        
+        
+        depth_z = (self.ROI_s_z * self.params['dmd_to_sample_ratio']/ self.image_inv.shape[0] )
+         
+        
+        if self.params['time_lapse_view'] == 0:   #xy
+            title= f"Inverted Time Lapse XY {self.params['time_lapse_mode']} (base: {self.params['base']})"
+            show_image(self.tl_stack, title= title, ordinate = 'X', ascisse = 'Y', 
+                       scale_ord = self.params['pixel_size'], scale_asc = self.params['pixel_size'])  
             
-        pg.image(self.tl_stack, title= f"Inverted Time Lapse (base: {self.params['base']})")        
+        elif self.params['time_lapse_view'] == 1: #xz
+            title= f"Inverted Time Lapse XZ {self.params['time_lapse_mode']} (base: {self.params['base']})"
+            show_image(self.tl_stack.transpose(), title= title, ordinate = 'X', ascisse = 'Z', 
+                       scale_ord = self.params['pixel_size'], scale_asc = depth_z )  
+            
+        elif self.params['time_lapse_view'] == 2: #yz
+            title= f"Inverted Time Lapse YZ {self.params['time_lapse_mode']} (base: {self.params['base']})"
+            show_image(self.tl_stack, title= title, ordinate = 'Z', ascisse = 'Y', 
+                       scale_ord = depth_z, scale_asc = self.params['pixel_size'] )  
+            
+        
+        
+        # pg.image(self.tl_stack, title= f"Inverted Time Lapse (base: {self.params['base']})")        
         
         if self.name == 'coherentSVIM_analysis':
             #keeps the window open running a QT application
@@ -613,11 +853,13 @@ class coherentSVIM_analysis:
             newpath = self.file_path[:-3] + '_ANALYSED'
             if not os.path.exists(newpath):
                 os.makedirs(newpath)
+                
+            view = ['XY', 'XZ', 'YZ'][self.params['time_lapse_view']]
             
             if len(self.params["time_lapse_save_label"]) >0:
-                fname = os.path.join(newpath, f'time_lapse_inverted_{self.params["time_lapse_mode"]}_{self.params["time_lapse_save_label"]}.h5')
+                fname = os.path.join(newpath, f'time_lapse_inverted_{self.params["time_lapse_mode"]}_{view}_{self.params["time_lapse_save_label"]}.h5')
             else:
-                fname = os.path.join(newpath, f'time_lapse_inverted_{self.params["time_lapse_mode"]}.h5')
+                fname = os.path.join(newpath, f'time_lapse_inverted_{self.params["time_lapse_mode"]}_{view}.h5')
             
             while os.path.exists(fname):
                 fname = fname[:-3] + '_bis.h5'
@@ -632,13 +874,39 @@ class coherentSVIM_analysis:
      
             # create a dataset
             name = 't000/c000/' + tail[:-3]
-            h5dataset = parent.create_dataset(name = name, shape=self.image_inv.shape, data = self.image_inv)
+            h5dataset = parent.create_dataset(name = name, shape=self.tl_stack.shape, data = self.tl_stack)
             h5dataset.dims[0].label = "t"
             h5dataset.dims[1].label = "y"
             h5dataset.dims[2].label = "x"
             
-            h5dataset.attrs['element_size_um'] =  [1,0.65,0.65]
-        
+            h5dataset.attrs['element_size_um'] =  [1, self.params['pixel_size'], self.params['pixel_size']]
+            
+            
+            depth_z = (self.ROI_s_z * self.params['dmd_to_sample_ratio']/ self.image_inv.shape[0] )
+            
+            
+            
+            if self.params['time_lapse_view'] == 0:   #xy
+                h5dataset.dims[0].label = "t"
+                h5dataset.dims[1].label = "y"
+                h5dataset.dims[2].label = "x"
+                
+                h5dataset.attrs['element_size_um'] =  [1, self.params['pixel_size'], self.params['pixel_size']]
+                
+            elif self.params['time_lapse_view'] == 1: #xz
+                h5dataset.dims[0].label = "t"
+                h5dataset.dims[1].label = "z"
+                h5dataset.dims[2].label = "x"
+                
+                h5dataset.attrs['element_size_um'] =  [1, depth_z, self.params['pixel_size']]
+                
+            elif self.params['time_lapse_view'] == 2: #yz
+                h5dataset.dims[0].label = "t"
+                h5dataset.dims[1].label = "y"
+                h5dataset.dims[2].label = "z"
+                
+                h5dataset.attrs['element_size_um'] =  [1, self.params['pixel_size'], depth_z]
+            
         finally:
             parent.close()
 
@@ -653,7 +921,7 @@ if __name__ == "__main__" :
         # file_name = '/Users/marcovitali/Documents/Poli/tesi/ScopeFoundy/coherentSVIM/data/220523_cuma_fluo_test/220523_113501_DMD_light_sheet_no_diff_300ul_transp_6px_posneg.h5'
         
         # file_name = '/Users/marcovitali/Documents/Poli/tesi/ScopeFoundy/coherentSVIM/data/220523_cuma_fluo_test/220523_110615_coherent_SVIM_diff_300ul_transp.h5'
-        file_name = '/Users/marcovitali/Documents/Poli/tesi/coherentSVIM/data/220523_cuma_fluo_test/220523_113202_coherent_SVIM_no_diff_300ul_transp.h5'
+        file_name = '/Users/marcovitali/Documents/Poli/tesi/ScopeFoundy/coherentSVIM/data/220523_cuma_fluo_test/220523_113202_coherent_SVIM_no_diff_300ul_transp.h5'
         
         
         dataset = coherentSVIM_analysis(file_name)
@@ -668,7 +936,7 @@ if __name__ == "__main__" :
 
         # dataset.show_im_raw()
         
-        dataset.choose_freq() # also removes any duplicate in frequency
+        # dataset.choose_freq() # also removes any duplicate in frequency
         
         #%% invert the raw image
         
@@ -680,15 +948,14 @@ if __name__ == "__main__" :
         lsqr_niter = 5
         lsqr_damp = 1e-4
         
-        dataset.p_invert(base = base)
+        # dataset.p_invert(base = base)
         
         # dataset.invert_and_denoise1D_no_for(base = base, lamda = lamda, niter_out = niter_out,
                                 # niter_in = niter_in, lsqr_niter = lsqr_niter, lsqr_damp = lsqr_damp)
         # invert_and_denoise3D_v2(base = base, lamda = lamda, niter_out = niter_out,
                                 # niter_in = niter_in, lsqr_niter = lsqr_niter, lsqr_damp = lsqr_damp)
         
-        
-        # dataset.show_inverted()
+        dataset.show_inverted()
         
         # dataset.show_inverted_xy()
         # dataset.show_inverted_xz()
