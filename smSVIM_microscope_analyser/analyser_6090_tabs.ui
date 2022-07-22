@@ -129,7 +129,7 @@
             </font>
            </property>
            <property name="text">
-            <string>PosNeg:</string>
+            <string>PosNeg: </string>
            </property>
           </widget>
          </item>
@@ -143,7 +143,7 @@
             </font>
            </property>
            <property name="text">
-            <string>Image size:</string>
+            <string>Image size: </string>
            </property>
           </widget>
          </item>
@@ -157,7 +157,7 @@
             </font>
            </property>
            <property name="text">
-            <string>Time Lapse:</string>
+            <string>Time Lapse: </string>
            </property>
           </widget>
          </item>

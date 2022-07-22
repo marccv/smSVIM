@@ -25,11 +25,19 @@ def scramble(H, N):
     return Pr @ H @ Pc
 
 
+# def walsh_gen_old(n):
+    
+#     from numpy import genfromtxt
+#     return genfromtxt(f'/Users/marcovitali/Documents/Poli/tesi/coherentSVIM/hadamard/wh{n}.csv', delimiter=',')
+
 def walsh_gen(n):
     
-    from numpy import genfromtxt
-    return genfromtxt(f"D:\\LabPrograms\\ScopeFoundry_POLIMI\\smSVIM_Microscope\\pattern\\walsh_hadamard\\wh{n}.csv", delimiter=',')
-
+    H = hadamard(n)
+    diffs = np.diff(H)
+    norm = np.linalg.norm(diffs, axis = 1)
+    order = np.argsort(norm)
+     
+    return H[order,:]
 
 def create_hadamard_patterns(num_of_patterns = 32, had_type = 'normal' , transpose_pattern=False, cropped_field_size = [256, 512],
                              im_size = [1080, 1920]):

@@ -87,7 +87,9 @@ class coherentSVIM_analysis:
             self.params[key] = val
         
         self.file_path  = fname
-        self.plot_windows = show_images_new_windows()
+        
+        if not hasattr(self, 'plot_windows'):
+            self.plot_windows = show_images_new_windows()
         
         
     @time_it   
@@ -769,25 +771,22 @@ class coherentSVIM_analysis:
                 self.load_h5_file(time_index)
                 
                 if self.select_ROI: self.setROI()
-                
-                self.merge_pos_neg()
+                if self.params['PosNeg']: self.merge_pos_neg()
+                if self.params['make_posneg']: self.make_pos_neg()
         
-                if not self.denoise:
+                if not self.params['denoise']:
                     # try:
                         
-                    if self.params['base'] != 'hadam':
-                        self.choose_freq()
-                        self.p_invert()
-                    else:
+                    if self.params['base'] == 'hadam' and self.params['PosNeg']:
                         self.invert()
-                    # except:
-                        # print('Could not invert')
+                    else:
+                        self.lsqr_invert()
                             
                 else:
-                    if self.params['base'] != 'hadam':
+                    if self.params['base'] == 'cos' or self.params['base'] == 'sq':
                         self.choose_freq()
                         
-                    self.invert_and_denoise3D_v2()  
+                    self.invert_and_denoise3D_v2() 
                 
                         
             

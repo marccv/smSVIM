@@ -423,7 +423,7 @@ class basic_app(coherentSVIM_analysis):
         if self.params['make_posneg']: self.make_pos_neg()
         
         
-        if not self.denoise:
+        if not self.params['denoise']:
             # try:
                 
             if self.params['base'] == 'hadam' and self.params['PosNeg']:

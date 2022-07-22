@@ -89,9 +89,14 @@ def scramble(H, N):
 
 def walsh_gen(n):
     
-    from numpy import genfromtxt
-    return genfromtxt(f'/Users/marcovitali/Documents/Poli/tesi/coherentSVIM/hadamard/wh{n}.csv', delimiter=',')
-    
+    # from numpy import genfromtxt
+    # return genfromtxt(f'/Users/marcovitali/Documents/Poli/tesi/coherentSVIM/hadamard/wh{n}.csv', delimiter=',')
+    H = hadamard(n)
+    diffs = np.diff(H)
+    norm = np.linalg.norm(diffs, axis = 1)
+    order = np.argsort(norm)
+     
+    return H[order,:]
 
 def create_hadamard_patterns(num_of_patterns = 32, had_type = 'normal' , transpose_pattern=False, cropped_field_size = [256, 512],
                              im_size = [1080, 1920]):
@@ -207,7 +212,7 @@ def create_rectangle_mask(cropped_field_size = [256, 512], im_size = [1080, 1920
             
 if __name__ == '__main__':
     
-    n = 16
+    n = 32
     # had_type = 'normal'
     had_type = 'walsh'
     # had_type = 'scrambled'

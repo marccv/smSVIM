@@ -75,7 +75,8 @@ class DMD_light_sheet_analysis:
         
         self.file_path  = fname
         self.denoised = False
-        self.plot_windows = show_images_new_windows()
+        if not hasattr(self, 'plot_windows'):
+            self.plot_windows = show_images_new_windows()
         
         
     @time_it   
