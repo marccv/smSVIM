@@ -90,7 +90,7 @@ def scramble(H, N):
 def walsh_gen(n):
     
     from numpy import genfromtxt
-    return genfromtxt(f'wh{n}.csv', delimiter=',')
+    return genfromtxt(f'/Users/marcovitali/Documents/Poli/tesi/coherentSVIM/hadamard/wh{n}.csv', delimiter=',')
     
 
 def create_hadamard_patterns(num_of_patterns = 32, had_type = 'normal' , transpose_pattern=False, cropped_field_size = [256, 512],
@@ -255,4 +255,20 @@ if __name__ == '__main__':
     b = 1/n * mat@mat
     
     print(b)
+    
+    
+    #%%
+    s = 0
+    for i in range(1000):
+    
+        a = 3*np.random.random(n)
+        
+        # H[H == 0] = -1
+        
+        ave_illum = np.mean(H@a, 0)
+        s += ave_illum
+    
+    print(s/1000)
+    
+    
     

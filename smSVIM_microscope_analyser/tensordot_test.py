@@ -137,6 +137,8 @@ print(rawim_res)
 inv,_,_,_ = lstsq(M[:-1, :-1], rawim_res, rcond = None)
 
 
+#%%
+
 
 
 

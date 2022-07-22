@@ -28,7 +28,7 @@ import pyqtgraph as pg
 import qtpy.QtCore
 from qtpy.QtWidgets import QApplication
 
-from show_image import show_image
+from show_image import show_images_new_windows
 
 def time_it(method):
     """Fucntion decorator to time a methos""" 
@@ -75,6 +75,7 @@ class DMD_light_sheet_analysis:
         
         self.file_path  = fname
         self.denoised = False
+        self.plot_windows = show_images_new_windows()
         
         
     @time_it   
@@ -86,7 +87,7 @@ class DMD_light_sheet_analysis:
     
     def show_im_raw(self):
                 
-        show_image(self.image.transpose(0,1,2), title="Raw image", ordinate = 'X', ascisse = 'Y', 
+        self.plot_windows.show_new_image(self.image.transpose(0,1,2), title="Raw image", ordinate = 'X', ascisse = 'Y', 
                    scale_ord = 0.65e-6, scale_asc = 0.65e-6)    
         
         if self.name == 'DMD_light_sheet_analysis':
@@ -454,12 +455,12 @@ if __name__ == "__main__" :
         
         #%%
         
-        show_image(dataset.image, title = 'denoised', ordinate = 'X', ascisse = 'Y', 
-                   scale_ord = 0.65e-6, scale_asc = 0.65e-6)
+        # self.plot_windows.show_new_image(dataset.image, title = 'denoised', ordinate = 'X', ascisse = 'Y', 
+        #            scale_ord = 0.65e-6, scale_asc = 0.65e-6)
     
-        #keeps the window open running a QT application
-        if sys.flags.interactive != 1 or not hasattr(qtpy.QtCore, 'PYQT_VERSION'):
-            QApplication.exec_()
-        sys.exit ( "End of test")
+        # #keeps the window open running a QT application
+        # if sys.flags.interactive != 1 or not hasattr(qtpy.QtCore, 'PYQT_VERSION'):
+        #     QApplication.exec_()
+        # sys.exit ( "End of test")
             
         

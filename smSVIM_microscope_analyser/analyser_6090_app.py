@@ -8,16 +8,16 @@ Created on Fri May 20 16:23:38 2022
 
 import sys
 from qtpy import QtWidgets, uic
-import qtpy.QtCore
-import pyqtgraph as pg
-from get_h5_data import get_h5_dataset, get_h5_attr
-import h5py
+# import qtpy.QtCore
+# import pyqtgraph as pg
+from get_h5_data import get_h5_attr
+# import h5py
 from analyser_transform_6090 import coherentSVIM_analysis
 from analyser_DMD_light_sheet import DMD_light_sheet_analysis
 
 import numpy as np
 
-from show_image import show_image
+from show_image import show_images_new_windows
 
 # import matplotlib.pyplot as plt
 # from matplotlib.figure import Figure
@@ -33,6 +33,7 @@ class basic_app(coherentSVIM_analysis):
         self.name = 'basic_app'
         self.qtapp.setApplicationName(self.name)
         self.dialogs = list()
+        self.plot_windows = show_images_new_windows()
       
         
     def setup(self):
@@ -96,8 +97,10 @@ class basic_app(coherentSVIM_analysis):
         self.plot_modes = ['max','ave', 'stack']
         self.ui.pushButton_save_inverted.clicked.connect(self.save_inverted_app)
         self.ui.pushButton_show_inverted.clicked.connect(self.show_projections_app)
-        
-        
+        self.ui.pushButton_close_all_plots.clicked.connect(
+            lambda checked: self.plot_windows.close_all()
+            )
+        self.ui.pushButton_close_all_plots.setEnabled(True)
         
         # invert complete time lapse
         self.ui.invert_and_save_complete_tl.clicked.connect(self.invert_and_save_complete_tl_app)
@@ -192,6 +195,7 @@ class basic_app(coherentSVIM_analysis):
                           'dmd_to_sample_ratio': self.ui.doubleSpinBox_dmd_to_sample.value(), #dmd pixel to sample ratio (um/px)
                           'dark_counts': self.ui.doubleSpinBox_dark_counts.value(),
                           'PosNeg': self.PosNeg,
+                          'make_posneg': self.ui.checkBox_make_posneg.isChecked(),
                           'select_ROI': self.ui.checkBox_select_ROI.isChecked(),
                           'apply_denoise': self.ui.checkBox_denoise.isChecked(),
                           'X0': self.ui.spinBox_x0.value(),
@@ -273,15 +277,24 @@ class basic_app(coherentSVIM_analysis):
             self.params['time_frames_n'] = None
             
         temp = 'time_frames_n'
-        self.ui.label_time_lapse.setText(f'{self.time_lapse} ({self.params[temp] } time frame(s))')
+        self.ui.label_time_lapse.setText(f'{self.time_lapse} ({self.params[temp] } time frames)')
         
         self.PosNeg = get_h5_attr(self.file_path, 'PosNeg')[0]
-            
+        if self.PosNeg:
+            self.ui.checkBox_make_posneg.setChecked(False)
+            self.ui.checkBox_make_posneg.setEnabled(False)
+        else:
+            self.ui.checkBox_make_posneg.setEnabled(True)
         self.ui.label_PosNeg.setText(f'{self.PosNeg}')
         self.subarray_hsize = get_h5_attr(self.file_path, 'subarray_hsize')[0]
         self.subarray_vsize = get_h5_attr(self.file_path, 'subarray_vsize')[0]
-        self.ui.label_image_size.setText(f'{int(self.subarray_hsize):4d} x {int(self.subarray_vsize):4d} (px)')
+        self.num_frames = get_h5_attr(self.file_path, 'num_frames')[0]
+        self.ui.label_image_size.setText(f'{int(self.subarray_hsize):4d} x {int(self.subarray_vsize):4d} x {int(self.num_frames):2d} (px)')
         
+        self.ui.spinBox_x0.setValue(int(self.subarray_vsize/4))
+        self.ui.spinBox_y0.setValue(int(self.subarray_hsize/4))
+        self.ui.spinBox_delta_x.setValue(int(self.subarray_vsize/2))
+        self.ui.spinBox_delta_y.setValue(int(self.subarray_hsize/2))
         
         
         if self.new_file_path.find('coherent_SVIM') != -1 or self.new_file_path.find('Hadamard') != -1 :
@@ -395,6 +408,7 @@ class basic_app(coherentSVIM_analysis):
         self.load_h5_file(self.t_frame_index)
         if self.select_ROI: self.setROI()
         if self.PosNeg: self.merge_pos_neg()
+        if self.params['make_posneg']: self.make_pos_neg()
         self.show_im_raw()    
      
 
@@ -406,15 +420,16 @@ class basic_app(coherentSVIM_analysis):
         self.load_h5_file(self.t_frame_index)
         if self.select_ROI: self.setROI()
         if self.PosNeg: self.merge_pos_neg()
+        if self.params['make_posneg']: self.make_pos_neg()
         
         
         if not self.denoise:
             # try:
                 
-            if self.params['base'] != 'hadam' or not self.params['PosNeg']:
-                self.lsqr_invert()
-            else:
+            if self.params['base'] == 'hadam' and self.params['PosNeg']:
                 self.invert()
+            else:
+                self.lsqr_invert()
                     
         else:
             if self.params['base'] == 'cos' or self.params['base'] == 'sq':
@@ -456,55 +471,55 @@ class basic_app(coherentSVIM_analysis):
         if self.params['plot_mode'] == 'ave':
             
             if self.params['plot_view'] == 0:   #xy
-                title= f"Inverted image XY AVERAGE (base: {self.params['base']})"
-                show_image(np.mean(self.image_inv, 0), title= title, ordinate = 'X', ascisse = 'Y', 
+                title= f"Inverted volume XY AVERAGE (base: {self.params['base']})"
+                self.plot_windows.show_new_image(np.mean(self.image_inv, 0), title= title, ordinate = 'X', ascisse = 'Y', 
                            scale_ord = width_xy, scale_asc = width_xy)  
                 
             elif self.params['plot_view'] == 1: #xz
-                title= f"Inverted image XZ AVERAGE (base: {self.params['base']})"
-                show_image(np.mean(self.image_inv, 2).transpose(), title= title, ordinate = 'X', ascisse = 'Z', 
+                title= f"Inverted volume XZ AVERAGE (base: {self.params['base']})"
+                self.plot_windows.show_new_image(np.mean(self.image_inv, 2).transpose(), title= title, ordinate = 'X', ascisse = 'Z', 
                            scale_ord = width_xy, scale_asc = depth_z )  
                 
             elif self.params['plot_view'] == 2: #yz
-                title= f"Inverted image YZ AVERAGE (base: {self.params['base']})"
-                show_image(np.mean(self.image_inv, 1), title= title, ordinate = 'Z', ascisse = 'Y', 
+                title= f"Inverted volume YZ AVERAGE (base: {self.params['base']})"
+                self.plot_windows.show_new_image(np.mean(self.image_inv, 1), title= title, ordinate = 'Z', ascisse = 'Y', 
                            scale_ord = depth_z, scale_asc = width_xy )  
                 
         if self.params['plot_mode'] == 'max':
             
             if self.params['plot_view'] == 0:   #xy
-                title= f"Inverted image XY MAX (base: {self.params['base']})"
-                show_image(np.max(self.image_inv, 0), title= title, ordinate = 'X', ascisse = 'Y', 
+                title= f"Inverted volume XY MAX (base: {self.params['base']})"
+                self.plot_windows.show_new_image(np.max(self.image_inv, 0), title= title, ordinate = 'X', ascisse = 'Y', 
                            scale_ord = width_xy, scale_asc = width_xy)  
                 
             elif self.params['plot_view'] == 1: #xz
-                title= f"Inverted image XZ MAX (base: {self.params['base']})"
-                show_image(np.max(self.image_inv, 2).transpose(), title= title, ordinate = 'X', ascisse = 'Z', 
+                title= f"Inverted volume XZ MAX (base: {self.params['base']})"
+                self.plot_windows.show_new_image(np.max(self.image_inv, 2).transpose(), title= title, ordinate = 'X', ascisse = 'Z', 
                            scale_ord = width_xy, scale_asc = depth_z )  
                 
             elif self.params['plot_view'] == 2: #yz
-                title= f"Inverted image YZ MAX (base: {self.params['base']})"
-                show_image(np.max(self.image_inv, 1), title= title, ordinate = 'Z', ascisse = 'Y', 
+                title= f"Inverted volume YZ MAX (base: {self.params['base']})"
+                self.plot_windows.show_new_image(np.max(self.image_inv, 1), title= title, ordinate = 'Z', ascisse = 'Y', 
                            scale_ord = depth_z, scale_asc = width_xy )  
                 
         elif self.params['plot_mode'] == 'stack':
             
             if self.params['plot_view'] == 0:   #xy
-                title= f"Inverted image XY (base: {self.params['base']})"
-                show_image(self.image_inv, title= title, ordinate = 'X', ascisse = 'Y', 
+                title= f"Inverted volume XY (base: {self.params['base']})"
+                self.plot_windows.show_new_image(self.image_inv, title= title, ordinate = 'X', ascisse = 'Y', 
                            scale_ord = width_xy, scale_asc = width_xy)  
                 
             elif self.params['plot_view'] == 1: #xz
-                title= f"Inverted image XZ (base: {self.params['base']})"
-                show_image(self.image_inv.transpose(2,1,0), title= title, ordinate = 'X', ascisse = 'Z', 
+                title= f"Inverted volume XZ (base: {self.params['base']})"
+                self.plot_windows.show_new_image(self.image_inv.transpose(2,1,0), title= title, ordinate = 'X', ascisse = 'Z', 
                            scale_ord = width_xy, scale_asc = depth_z )  
                 
             elif self.params['plot_view'] == 2: #yz
-                title= f"Inverted image YZ (base: {self.params['base']})"
-                show_image(self.image_inv.transpose(1,0,2), title= title, ordinate = 'Z', ascisse = 'Y', 
+                title= f"Inverted volume YZ (base: {self.params['base']})"
+                self.plot_windows.show_new_image(self.image_inv.transpose(1,0,2), title= title, ordinate = 'Z', ascisse = 'Y', 
                            scale_ord = depth_z, scale_asc = width_xy ) 
                 
-        # show_image(image, title)      
+        # self.plot_windows.show_new_image(image, title)      
     
         
     def invert_and_save_complete_tl_app(self):
@@ -568,34 +583,34 @@ class basic_app(coherentSVIM_analysis):
             
             if self.ls_analyser.params['plot_view'] == 0:   #xy
                 title= "Light Sheet Volume: XY SUM"
-                show_image(np.sum(self.ls_analyser.image, 0), title= title, ordinate = 'X', ascisse = 'Y', 
+                self.plot_windows.show_new_image(np.sum(self.ls_analyser.image, 0), title= title, ordinate = 'X', ascisse = 'Y', 
                            scale_ord = width_xy, scale_asc = width_xy)  
                 
             elif self.ls_analyser.params['plot_view'] == 1: #xz
                 title= "Light Sheet Volume: XZ SUM"
-                show_image(np.sum(self.ls_analyser.image, 2).transpose(), title= title, ordinate = 'X', ascisse = 'Z', 
+                self.plot_windows.show_new_image(np.sum(self.ls_analyser.image, 2).transpose(), title= title, ordinate = 'X', ascisse = 'Z', 
                            scale_ord = width_xy, scale_asc = depth_z )  
                 
             elif self.ls_analyser.params['plot_view'] == 2: #yz
                 title= "Light Sheet Volume: YZ SUM"
-                show_image(np.sum(self.ls_analyser.image, 1), title= title, ordinate = 'Z', ascisse = 'Y', 
+                self.plot_windows.show_new_image(np.sum(self.ls_analyser.image, 1), title= title, ordinate = 'Z', ascisse = 'Y', 
                            scale_ord = depth_z, scale_asc = width_xy )  
                 
         else:
             
             if self.ls_analyser.params['plot_view'] == 0:   #xy
                 title= f"Light Sheet Volume: XY"
-                show_image(self.ls_analyser.image, title= title, ordinate = 'X', ascisse = 'Y', 
+                self.plot_windows.show_new_image(self.ls_analyser.image, title= title, ordinate = 'X', ascisse = 'Y', 
                            scale_ord = width_xy, scale_asc = width_xy)  
                 
             elif self.ls_analyser.params['plot_view'] == 1: #xz
                 title= f"Light Sheet Volume: XZ"
-                show_image(self.ls_analyser.image.transpose(2,1,0), title= title, ordinate = 'X', ascisse = 'Z', 
+                self.plot_windows.show_new_image(self.ls_analyser.image.transpose(2,1,0), title= title, ordinate = 'X', ascisse = 'Z', 
                            scale_ord = width_xy, scale_asc = depth_z )  
                 
             elif self.ls_analyser.params['plot_view'] == 2: #yz
                 title= f"Light Sheet Volume: YZ"
-                show_image(self.ls_analyser.image.transpose(1,0,2), title= title, ordinate = 'Z', ascisse = 'Y', 
+                self.plot_windows.show_new_image(self.ls_analyser.image.transpose(1,0,2), title= title, ordinate = 'Z', ascisse = 'Y', 
                            scale_ord = depth_z, scale_asc = width_xy ) 
                 
         

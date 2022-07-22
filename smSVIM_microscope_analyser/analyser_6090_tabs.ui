@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>1068</width>
-    <height>762</height>
+    <height>769</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -313,7 +313,7 @@
                    </font>
                   </property>
                   <property name="decimals">
-                   <number>4</number>
+                   <number>3</number>
                   </property>
                   <property name="singleStep">
                    <double>0.100000000000000</double>
@@ -333,7 +333,7 @@
                    </font>
                   </property>
                   <property name="decimals">
-                   <number>4</number>
+                   <number>3</number>
                   </property>
                   <property name="value">
                    <double>1.195000000000000</double>
@@ -395,6 +395,23 @@
                  </widget>
                 </item>
                </layout>
+              </item>
+              <item>
+               <widget class="QCheckBox" name="checkBox_make_posneg">
+                <property name="enabled">
+                 <bool>false</bool>
+                </property>
+                <property name="font">
+                 <font>
+                  <pointsize>13</pointsize>
+                  <weight>50</weight>
+                  <bold>false</bold>
+                 </font>
+                </property>
+                <property name="text">
+                 <string>Make data PosNeg</string>
+                </property>
+               </widget>
               </item>
               <item>
                <widget class="Line" name="line_7">
@@ -1496,6 +1513,23 @@
                  </size>
                 </property>
                </spacer>
+              </item>
+              <item>
+               <widget class="QPushButton" name="pushButton_close_all_plots">
+                <property name="enabled">
+                 <bool>false</bool>
+                </property>
+                <property name="font">
+                 <font>
+                  <pointsize>13</pointsize>
+                  <weight>50</weight>
+                  <bold>false</bold>
+                 </font>
+                </property>
+                <property name="text">
+                 <string>Close all plot windows</string>
+                </property>
+               </widget>
               </item>
              </layout>
             </widget>

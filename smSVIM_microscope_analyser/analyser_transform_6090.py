@@ -11,7 +11,7 @@ import numpy as np
 import transform_6090 as t_6090
 import scipy.fftpack as sp_fft
 from get_h5_data import get_h5_dataset, get_h5_attr
-import tifffile as tiff
+# import tifffile as tiff
 import time
 import matplotlib.pyplot as plt
 plt.rcParams['figure.dpi'] = 300
@@ -22,7 +22,7 @@ plt.rcParams.update({'font.size': 9})
 import pylops
 # from scipy.sparse.linalg import aslinearoperator
 from scipy.sparse.linalg import LinearOperator
-from scipy.optimize import least_squares
+# from scipy.optimize import least_squares
 from numpy.linalg import lstsq
 
 import sys
@@ -33,7 +33,7 @@ import qtpy.QtCore
 from qtpy.QtWidgets import QApplication
 
 
-from show_image import show_image
+from show_image import show_images_new_windows
 
 
 def time_it(method):
@@ -87,6 +87,7 @@ class coherentSVIM_analysis:
             self.params[key] = val
         
         self.file_path  = fname
+        self.plot_windows = show_images_new_windows()
         
         
     @time_it   
@@ -97,7 +98,7 @@ class coherentSVIM_analysis:
     
     def show_im_raw(self):
                 
-        show_image(self.imageRaw.transpose(0,1,2), title="Raw image", ordinate = 'X', ascisse = 'Y', 
+        self.plot_windows.show_new_image(self.imageRaw.transpose(0,1,2), title="Raw image", ordinate = 'X', ascisse = 'Y', 
                    scale_ord = 0.65e-6, scale_asc = 0.65e-6)    
         
         if self.name == 'coherentSVIM_analysis':
@@ -134,9 +135,15 @@ class coherentSVIM_analysis:
         
         
     @time_it
-    def make_it_pos_neg(self):
+    def make_pos_neg(self):
         
-        self.imageRaw = self.imageRaw * 2 - self.imageRaw[0,:,:] #TODO: this does not work for scrambled hadamard where the continuos component is not the first pattern
+        # this method has problems when the contrast is not 1
+        # self.imageRaw = self.imageRaw * 2 - self.imageRaw[0,:,:] #TODO: this does not work for scrambled hadamard where the continuos component is not the first pattern
+    
+        self.imageRaw = 2*(self.imageRaw - np.mean(self.imageRaw[7:,:,:], 0)) #TODO: solve the problem of the always illuminated z-plane
+        
+    
+    
     
     @time_it
     def setROI(self, **kwargs):
@@ -289,7 +296,7 @@ class coherentSVIM_analysis:
             
             matrix = t_6090.create_hadamard_matrix(self.params['had_pat_num'], self.params['base'])
             
-        if not self.params['PosNeg']:
+        if not self.params['PosNeg'] and not self.params['make_posneg']:
             matrix[matrix <0] = 0
             
             # subtract dark counts
@@ -308,24 +315,24 @@ class coherentSVIM_analysis:
         
         
     
-    @time_it
-    def denoise(self, weight = 1000):
+    # @time_it
+    # def denoise(self, weight = 1000):
         
-        shape = self.image_inv.shape
-        self.param = 'Chambolle 1D denoise on already inverted image with linear weigth'
+    #     shape = self.image_inv.shape
+    #     self.param = 'Chambolle 1D denoise on already inverted image with linear weigth'
         
-        if self.params['base'] == 'cos':
-            ratio = 0.1193
-        elif self.params['base'] == 'sq':
-            ratio = 0.20439
+    #     if self.params['base'] == 'cos':
+    #         ratio = 0.1193
+    #     elif self.params['base'] == 'sq':
+    #         ratio = 0.20439
         
-        for i in range(shape[1]):
-            for j in range(shape[2]):
+    #     for i in range(shape[1]):
+    #         for j in range(shape[2]):
                 
-                weight = max(self.image_inv[:,i,j]) * ratio
-                # self.image_inv[:,i,j] = denoise_tv_chambolle(self.image_inv[:,i,j], weight)
+    #             weight = max(self.image_inv[:,i,j]) * ratio
+    #             self.image_inv[:,i,j] = denoise_tv_chambolle(self.image_inv[:,i,j], weight)
         
-        self.denoised = True
+    #     self.denoised = True
     
     
     @time_it
@@ -427,6 +434,12 @@ class coherentSVIM_analysis:
         shape = (nz,ny,nx)
         M = M.astype(float)
         
+        if not self.params['PosNeg'] and not self.params['make_posneg']:
+            M[M <0] = 0
+            
+            # subtract dark counts
+            self.imageRaw -= self.params['dark_counts']
+        
         Nz = M.shape[1]
         
         def Op(v):
@@ -498,7 +511,7 @@ class coherentSVIM_analysis:
         
         # TODO make  the aspect ratio of the displayedimage match the sampled volume aspect ratio
         
-        pg.image(self.image_inv, title= f"Inverted image (base: {self.params['base']})")        
+        pg.image(self.image_inv, title= f"Inverted volume (base: {self.params['base']})")        
         
         if self.name == 'coherentSVIM_analysis':
             #keeps the window open running a QT application
@@ -518,7 +531,7 @@ class coherentSVIM_analysis:
         
         fig1, (ax1, ax2) =plt.subplots(2, 1, gridspec_kw={'height_ratios': [ 4, 1]})
         # fig1.clf()
-        fig1.text(0.1,0.2, f'Inverted image projections\n{self.params}')
+        fig1.text(0.1,0.2, f'Inverted volume projections\n{self.params}')
         
         xy = ax1.imshow(inverted_xy.transpose(), cmap = 'gray', aspect = 1, vmin = c_min, vmax = c_max)
         ax1.set_xlabel('x (px)')
@@ -526,7 +539,7 @@ class coherentSVIM_analysis:
         cbar = fig1.colorbar(xy, ax = ax1, format='%.0e')
         cbar.ax.set_ylabel('Counts', rotation=270)
         
-        xz = ax2.imshow(inverted_xz, cmap = 'gray', aspect = 12.82,  vmin = c_min, vmax = c_max) #aspect = 12.82
+        # xz = ax2.imshow(inverted_xz, cmap = 'gray', aspect = 12.82,  vmin = c_min, vmax = c_max) #aspect = 12.82
         ax2.set_xlabel('x (px)')
         ax2.set_ylabel('z (px)')
         # fig1.colorbar(xz, ax = ax1)
@@ -541,7 +554,7 @@ class coherentSVIM_analysis:
         
         fig1=plt.figure()
         fig1.clf()
-        fig1.suptitle(f'Inverted image XY projection\n{self.params}')
+        fig1.suptitle(f'Inverted volume XY projection\n{self.params}')
         ax1=fig1.add_subplot(111)
         xy = ax1.imshow(inverted_xy.transpose(), cmap = 'gray', aspect = 1)
         ax1.set_xlabel('x (px)')
@@ -581,7 +594,7 @@ class coherentSVIM_analysis:
             # print(ax1 is None)
         
         
-        fig1.suptitle(f'Inverted image XZ projection\n{self.params}')
+        fig1.suptitle(f'Inverted volume XZ projection\n{self.params}')
         
         xz = ax1.imshow(inverted_xz, cmap = 'gray', aspect = aspect_xz, interpolation = 'none') #aspect = 12.82 for 24 z pixels, aspect = 6.6558 for 61 z pixels, aspect = 11.80 for tests in 61px, aspect = 30 for testing in 24 px
         ax1.set_xlabel('x (px)')
@@ -690,6 +703,7 @@ class coherentSVIM_analysis:
                     
                     if self.select_ROI: self.setROI()
                     if self.params['PosNeg'] : self.merge_pos_neg()
+                    if self.params['make_posneg']: self.make_pos_neg()
             
                     if not self.denoise:
                         # try:
@@ -817,23 +831,23 @@ class coherentSVIM_analysis:
     def show_time_lapse(self):
         
         
-        depth_z = (self.ROI_s_z * self.params['dmd_to_sample_ratio']/ self.image_inv.shape[0] )
-         
+        depth_z = (self.ROI_s_z * self.params['dmd_to_sample_ratio']/ self.image_inv.shape[0] ) *1e-6 #(m/px)
+        width_xy = self.params['pixel_size']*1e-6  #(m/px)
         
         if self.params['time_lapse_view'] == 0:   #xy
             title= f"Inverted Time Lapse XY {self.params['time_lapse_mode']} (base: {self.params['base']})"
-            show_image(self.tl_stack, title= title, ordinate = 'X', ascisse = 'Y', 
-                       scale_ord = self.params['pixel_size'], scale_asc = self.params['pixel_size'])  
+            self.plot_windows.show_new_image(self.tl_stack, title= title, ordinate = 'X', ascisse = 'Y', 
+                       scale_ord = width_xy, scale_asc = width_xy)  
             
         elif self.params['time_lapse_view'] == 1: #xz
             title= f"Inverted Time Lapse XZ {self.params['time_lapse_mode']} (base: {self.params['base']})"
-            show_image(self.tl_stack.transpose(), title= title, ordinate = 'X', ascisse = 'Z', 
-                       scale_ord = self.params['pixel_size'], scale_asc = depth_z )  
+            self.plot_windows.show_new_image(self.tl_stack.transpose((0,2,1)), title= title, ordinate = 'X', ascisse = 'Z', 
+                       scale_ord = width_xy, scale_asc = depth_z )  
             
         elif self.params['time_lapse_view'] == 2: #yz
             title= f"Inverted Time Lapse YZ {self.params['time_lapse_mode']} (base: {self.params['base']})"
-            show_image(self.tl_stack, title= title, ordinate = 'Z', ascisse = 'Y', 
-                       scale_ord = depth_z, scale_asc = self.params['pixel_size'] )  
+            self.plot_windows.show_new_image(self.tl_stack, title= title, ordinate = 'Z', ascisse = 'Y', 
+                       scale_ord = depth_z, scale_asc = width_xy)  
             
         
         
@@ -979,7 +993,7 @@ if __name__ == "__main__" :
             
         #%% load a saved reconstructed image
         
-        import h5py
+        # import h5py
         
         # import sys
         # import pyqtgraph as pg

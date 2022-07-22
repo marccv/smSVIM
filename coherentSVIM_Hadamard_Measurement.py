@@ -15,9 +15,28 @@ from scipy.linalg import hadamard
 
 
 
+def scramble(H, N):
+    
+    np.random.seed(222)
+    
+    I = np.eye(N)
+    Pr = I[np.random.permutation(N), :]
+    Pc = I[np.random.permutation(N), :]
+    return Pr @ H @ Pc
 
-def create_hadamard_patterns(num_of_patterns = 32, scrambled = False ,transpose_pattern=False, cropped_field_size = [256, 512],
+
+def walsh_gen(n):
+    
+    from numpy import genfromtxt
+    return genfromtxt(f"D:\\LabPrograms\\ScopeFoundry_POLIMI\\smSVIM_Microscope\\pattern\\walsh_hadamard\\wh{n}.csv", delimiter=',')
+
+
+def create_hadamard_patterns(num_of_patterns = 32, had_type = 'normal' , transpose_pattern=False, cropped_field_size = [256, 512],
                              im_size = [1080, 1920]):
+    
+    """
+    had types: [ 'normal', 'walsh', 'scrambled']
+    """
     
     s_y = im_size[0]
     s_x = im_size[1]
@@ -26,12 +45,15 @@ def create_hadamard_patterns(num_of_patterns = 32, scrambled = False ,transpose_
     s_diag = cropped_field_size[0] #dimension of the border parallel to the diagonal direction
     s_anti = cropped_field_size[1] #dimension of the border parallel to the antidiagonal direction  
 
-    H = hadamard(num_of_patterns)
     
-    if scrambled == True:
-        H = H # insert here the permutations
-    
-    
+    if had_type == 'normal':
+        H = hadamard(num_of_patterns)
+    elif had_type == 'walsh':
+        H = walsh_gen(num_of_patterns)
+    elif had_type == 'scrambled':
+        H = scramble(hadamard(num_of_patterns), num_of_patterns)
+
+
     H[H<0] = 0 # the DMD only accepts 0 and 1, so to create the real pattern I will have to operate in PosNeg mode
     
     images = []
@@ -123,8 +145,7 @@ class coherentSvim_Hadamard_Measurement(BaseSvimMeasurement):
         self.had_pat_num.hardware_set_func = self.set_had_pat_num
         
         # self.settings.New('reorder_test', dtype = bool, initial = True )
-        self.settings.New('walsh_order', dtype = bool, initial = False)
-        self.settings.New('scrambled', dtype = bool, initial = False)
+        self.settings.New('had_type', dtype = str, choices = [ 'normal', 'walsh', 'scrambled'], initial = 'normal')
    
     def run_svim_mode_function(self):
         transpose_pattern = self.settings['transpose_pattern']
@@ -133,12 +154,12 @@ class coherentSvim_Hadamard_Measurement(BaseSvimMeasurement):
             
         if self.settings['PosNeg'] == False:
               
-            images = create_hadamard_patterns( self.settings['had_pat_num'], self.settings['scrambled'], transpose_pattern, cropped_field_size )
+            images = create_hadamard_patterns( self.settings['had_pat_num'], self.settings['had_type'], transpose_pattern, cropped_field_size )
         
         else:
             #PosNeg
             images = []
-            im_pos = create_hadamard_patterns( self.settings['had_pat_num'], self.settings['scrambled'], transpose_pattern, cropped_field_size )
+            im_pos = create_hadamard_patterns( self.settings['had_pat_num'], self.settings['had_type'], transpose_pattern, cropped_field_size )
                     
             for im in im_pos:
                 images.append(im)
@@ -164,9 +185,5 @@ class coherentSvim_Hadamard_Measurement(BaseSvimMeasurement):
     #         repeatnum = len(sequence)
             
             
-            # self.dmd_hw.dmd.reorderlut(sequence, repeatnum)  
-            # self.camera.settings['number_frames'] = int(len(sequence))
-
-
-
+    #         self.dmd_hw.dmd.reorderlut(sequence, repeatnum)         
         
