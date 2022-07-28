@@ -4,4 +4,5 @@ The class to create the direct matrix of the problem is contained in **smSVIM_mi
 
 The class to perform the analysis of an H5 image is contained in **smSVIM_microscope_analyser/analyser_transform_6090.py**
 
-Both this classes are easily usable through the app in **smSVIM_microscope_analyser/analyser_6090_app.py**
+----------------
+Both this classes are implemented in the app **smSVIM_microscope_analyser/analyser_6090_app.py**
