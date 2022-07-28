@@ -7,7 +7,8 @@ Created on Fri May 20 16:23:38 2022
 """
 
 import sys
-from qtpy import QtWidgets, uic
+from qtpy import QtWidgets, uic, QtGui
+
 # import qtpy.QtCore
 # import pyqtgraph as pg
 from get_h5_data import get_h5_attr
@@ -34,12 +35,16 @@ class basic_app(coherentSVIM_analysis):
         self.qtapp.setApplicationName(self.name)
         self.dialogs = list()
         self.plot_windows = show_images_new_windows()
+        
+        self.qtapp.setWindowIcon(QtGui.QIcon('icons8-coordinata-z-96 copy.png'))
       
         
     def setup(self):
         
-        self.ui_filename = '/Users/marcovitali/Documents/Poli/tesi/coherentSVIM/smSVIM_microscope_analyser/analyser_6090_tabs.ui'
+        self.ui_filename = '/Users/marcovitali/Documents/Poli/tesi/coherentSVIM/smSVIM_microscope_analyser/analyser_6090_tabs_2.ui'
         self.ui = uic.loadUi(self.ui_filename)
+        
+        self.ui.resize(1150, 200)
         
         # file path and load
         

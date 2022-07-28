@@ -53,9 +53,30 @@ def time_it(method):
 
 class coherentSVIM_analysis:
     
+    
+    """
+    
+    Class for the analyis of a SVIM dataset.
+    
+    Methods:
+        
+        - load_h5_file:    loads raw images in self.imageRaw
+        - invert:          inverts the raw images using the canonic inverse matrix of the problem,
+                           some will have very high condition numbers -> use the methods p_invert or
+                           lsqr_invert
+        - p_invert:        inverts the raw images using the problem pseudo inverse with given condition number
+        - lsqr_invert:     least square inversion
+        - merge_pos_neg:   subtracts couples of raw complementary raw images
+        - make_pos_neg:    
+    
+    """
+    
+    
+    
+    
     name = 'coherentSVIM_analysis'
 
-    def __init__(self, fname, **kwargs ):
+    def __init__(self, fname, **kwargs):
         
         #default values
         self.params = {'base': 'hadam',
@@ -140,11 +161,9 @@ class coherentSVIM_analysis:
     def make_pos_neg(self):
         
         # this method has problems when the contrast is not 1
-        # self.imageRaw = self.imageRaw * 2 - self.imageRaw[0,:,:] #TODO: this does not work for scrambled hadamard where the continuos component is not the first pattern
-    
-        self.imageRaw = 2*(self.imageRaw - np.mean(self.imageRaw[7:,:,:], 0)) #TODO: solve the problem of the always illuminated z-plane
         
-    
+        #TODO: this works only for walsh patterns
+        self.imageRaw = 2*(self.imageRaw - np.mean(self.imageRaw[7:,:,:], 0))
     
     
     @time_it
@@ -298,11 +317,16 @@ class coherentSVIM_analysis:
             
             matrix = t_6090.create_hadamard_matrix(self.params['had_pat_num'], self.params['base'])
             
+        
+        
         if not self.params['PosNeg'] and not self.params['make_posneg']:
             matrix[matrix <0] = 0
             
             # subtract dark counts
             self.imageRaw -= self.params['dark_counts']
+    
+    
+    
     
         matrix = matrix.astype(float)
         Nz = matrix.shape[1]
@@ -926,14 +950,14 @@ class coherentSVIM_analysis:
         
         
 #%%    
+
+
+# The use of this script has been made easier with the GUI found in "analyser_6090_app.py" (https://github.com/marccv/coherentSVIM)
+
  
 if __name__ == "__main__" :
     
 
-        # file_name = '/Users/marcovitali/Documents/Poli/tesi/ScopeFoundy/coherentSVIM/data/220523_cuma_fluo_test/220523_111748_DMD_light_sheet_diff_300ul_transp_6px_posneg.h5'
-        # file_name = '/Users/marcovitali/Documents/Poli/tesi/ScopeFoundy/coherentSVIM/data/220523_cuma_fluo_test/220523_113501_DMD_light_sheet_no_diff_300ul_transp_6px_posneg.h5'
-        
-        # file_name = '/Users/marcovitali/Documents/Poli/tesi/ScopeFoundy/coherentSVIM/data/220523_cuma_fluo_test/220523_110615_coherent_SVIM_diff_300ul_transp.h5'
         file_name = '/Users/marcovitali/Documents/Poli/tesi/ScopeFoundy/coherentSVIM/data/220523_cuma_fluo_test/220523_113202_coherent_SVIM_no_diff_300ul_transp.h5'
         
         

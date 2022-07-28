@@ -11,70 +11,6 @@ from scipy.linalg import hadamard
 import matplotlib.pyplot as plt
 
 
-# def create_hadamard_patterns_old(num_of_patterns = 32, transpose_pattern=False, cropped_field_size = [256, 512],
-#                              im_size = [1080, 1920]):
-    
-#     s_y = im_size[0]
-#     s_x = im_size[1]
-    
-#     # dimentions of the rectangle to be cropped out in units of pizel diagonal (same as unit_period)
-#     s_diag = cropped_field_size[0] #dimension of the border parallel to the diagonal direction
-#     s_anti = cropped_field_size[1] #dimension of the border parallel to the antidiagonal direction  
-
-#     H = hadamard(num_of_patterns)
-#     H[H<0] = 0 # the DMD only accepts 0 and 1, so to create the real pattern I will have to operate in PosNeg mode
-    
-#     images = []
-    
-#     if not transpose_pattern:
-#         #antidiag
-        
-#         repetitions = s_diag/num_of_patterns * 2
-        
-#         for i in range(num_of_patterns):
-            
-#             image = np.zeros(im_size, dtype = 'uint8')
-            
-#             strip = np.uint8(np.repeat(H[i], repetitions).reshape(1,s_diag*2).copy())
-            
-#             pad_len = s_y + 0.5*(s_x - s_y - s_diag*2)
-#             padding = np.zeros([1,int(pad_len)])
-            
-#             strip = np.concatenate((padding, strip, padding), axis = 1)
-            
-#             # print(strip)
-            
-#             for j in range(s_y):
-#                 image[j, :] = strip[0, (s_y-j-1):(s_y + s_x -j-1)]
-                
-#             images.append(image)
-#     else:
-#         #transpose: diag
-#         repetitions = s_anti/num_of_patterns * 2
-        
-#         for i in range(num_of_patterns):
-            
-#             image = np.zeros(im_size, dtype = 'uint8')
-            
-#             strip = np.uint8(np.repeat(H[i], repetitions).reshape(1,s_anti * 2).copy())
-            
-#             pad_len = s_y + 0.5*(s_x - s_y - s_anti * 2)
-#             padding = np.zeros([1,int(pad_len)])
-            
-#             strip = np.concatenate((padding, strip, padding), axis = 1)
-            
-#             # print(strip)
-            
-#             for j in range(s_y):
-#                 image[j, :] = strip[0, j :( s_x +j)]
-                
-#             images.append(image)
-        
-            
-#     return images, H
-
-
-
 
 
 def scramble(H, N):
@@ -89,14 +25,18 @@ def scramble(H, N):
 
 def walsh_gen(n):
     
-    # from numpy import genfromtxt
-    # return genfromtxt(f'/Users/marcovitali/Documents/Poli/tesi/coherentSVIM/hadamard/wh{n}.csv', delimiter=',')
     H = hadamard(n)
     diffs = np.diff(H)
     norm = np.linalg.norm(diffs, axis = 1)
     order = np.argsort(norm)
      
     return H[order,:]
+
+
+
+
+
+
 
 def create_hadamard_patterns(num_of_patterns = 32, had_type = 'normal' , transpose_pattern=False, cropped_field_size = [256, 512],
                              im_size = [1080, 1920]):
@@ -212,7 +152,7 @@ def create_rectangle_mask(cropped_field_size = [256, 512], im_size = [1080, 1920
             
 if __name__ == '__main__':
     
-    n = 32
+    n = 16
     # had_type = 'normal'
     had_type = 'walsh'
     # had_type = 'scrambled'
@@ -227,53 +167,64 @@ if __name__ == '__main__':
     xy = ax1.imshow(H)
     
     fig1.colorbar(xy, ax=ax1)
+    plt.title(f'{had_type} Hadamard, n = {n}')
     
     
     mask = create_rectangle_mask()
     images = images*mask
     
     
-    # for image in images:
+    for image in images:
         
     
-    #     fig1=plt.figure()
-    #     fig1.clf()
-    #     # fig1.suptitle(f'Inverted image XY projection\n{self.params}')
-    #     ax1=fig1.add_subplot(111)
+        fig1=plt.figure()
+        fig1.clf()
+        # fig1.suptitle(f'Inverted image XY projection\n{self.params}')
+        ax1=fig1.add_subplot(111)
         
-    #     image[:, int(1920/2)] = 0
-    #     image[int(1080/2), :] = 0
         
-    #     xy = ax1.imshow(image)
+        # I add this white lines to show the center of the frame
+        image[:, int(1920/2)] = 0
+        image[int(1080/2), :] = 0
         
-    #     fig1.colorbar(xy, ax=ax1)
+        xy = ax1.imshow(image)
         
+        fig1.colorbar(xy, ax=ax1)
+        
+        
+    # To show that the pattern is actually centered in the DMD frame
     # print(images[1,int(1080/2-15):int(1080/2+15),int(1920/2-15):int(1920/2+15)])
     
     
+    # np.savetxt(f'{had_type}_had_{n}.csv', H , fmt='%.3f', delimiter = ', ')
     
     
-    #%%
-    n = 8
-    mat = hadamard(n)
-    
-    b = 1/n * mat@mat
-    
-    print(b)
     
     
-    #%%
-    s = 0
-    for i in range(1000):
     
-        a = 3*np.random.random(n)
+    
+    
+    # #%%
+    # n = 8
+    # mat = hadamard(n)
+    
+    # b = 1/n * mat@mat
+    
+    # print(b)
+    
+    
+    # #%%
+    # s = 0
+    # for i in range(1000):
+    
+    #     a = 3*np.random.random(n)
         
-        # H[H == 0] = -1
+    #     # H[H == 0] = -1
         
-        ave_illum = np.mean(H@a, 0)
-        s += ave_illum
+    #     ave_illum = np.mean(H@a, 0)
+    #     s += ave_illum
     
-    print(s/1000)
+    # print(s/1000)
     
     
     
