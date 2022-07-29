@@ -100,7 +100,13 @@ def create_hadamard_matrix(num_of_patterns, had_type = 'hadam'):
         return hadamard(num_of_patterns)
     
     elif had_type == 'walsh':
-        return genfromtxt(f'/Users/marcovitali/Documents/Poli/tesi/coherentSVIM/hadamard/wh{num_of_patterns}.csv', delimiter=',')
+        
+        H = hadamard(num_of_patterns)
+        diffs = np.diff(H)
+        norm = np.linalg.norm(diffs, axis = 1)
+        order = np.argsort(norm)
+         
+        return H[order,:]
     
     elif had_type == 'scrambled':
         np.random.seed(222)
