@@ -843,9 +843,9 @@ class coherentSVIM_analysis:
                     if self.params['time_lapse_view'] == 0:
                         self.tl_stack.append(self.image_inv[self.params['time_lapse_plane'],:,:])
                     elif self.params['time_lapse_view'] == 1:
-                        self.tl_stack.append(self.image_inv[:, self.params['time_lapse_plane'],:])
-                    elif self.params['time_lapse_view'] == 2:
                         self.tl_stack.append(self.image_inv[:,:,self.params['time_lapse_plane']])
+                    elif self.params['time_lapse_view'] == 2:
+                        self.tl_stack.append(self.image_inv[:,self.params['time_lapse_plane'],:])
             
             self.tl_stack = np.array(self.tl_stack)
        
