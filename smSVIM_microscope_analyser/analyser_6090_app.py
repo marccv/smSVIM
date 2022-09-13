@@ -217,6 +217,7 @@ class basic_app(coherentSVIM_analysis):
                           'save_label': self.ui.lineEdit_save_label.text(),
                           'plot_view': (1*self.ui.radioButton_plot_xz.isChecked() + 2*self.ui.radioButton_plot_yz.isChecked()),
                           'plot_mode':  self.plot_modes[self.ui.comboBox_plot_mode.currentIndex()],
+                          'complete_time_lapse_save_label': self.ui.lineEdit_save_complete_tl.text(),
                           'time_lapse_mode': self.time_lapse_modes[self.ui.comboBox_time_lapse_mode.currentIndex()],
                           'time_lapse_view': ( 1*self.ui.radioButton_xz.isChecked() + 2*self.ui.radioButton_yz.isChecked()),
                           'time_lapse_plane' : self.ui.spinBox_time_laps_plane.value(),

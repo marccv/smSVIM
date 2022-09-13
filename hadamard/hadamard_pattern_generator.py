@@ -38,7 +38,7 @@ def walsh_gen(n):
 
 
 
-def create_hadamard_patterns(num_of_patterns = 32, had_type = 'normal' , transpose_pattern=False, cropped_field_size = [256, 512],
+def create_hadamard_patterns(num_of_patterns = 32, had_type = 'normal' , transpose_pattern=False, cropped_field_size = [256, 600],
                              im_size = [1080, 1920]):
     
     s_y = im_size[0]
@@ -115,7 +115,7 @@ def create_hadamard_patterns(num_of_patterns = 32, had_type = 'normal' , transpo
 
 
 
-def create_rectangle_mask(cropped_field_size = [256, 512], im_size = [1080, 1920]):
+def create_rectangle_mask(cropped_field_size = [256, 600], im_size = [1080, 1920]):
     
     """
     cropped_field_size: dimentions of the rectangle ROI. First dimention refers to the border

@@ -97,13 +97,24 @@ class BaseSvimMeasurement(Measurement):
         self.settings['num_frames'] = self.calculate_num_frames()
               
         if hasattr(self, 'time_frames_n'):
-                self.settings['time_frames_n'] = self.calculate_time_frames_n() 
+                self.settings['time_frames_n'] = self.calculate_time_frames_n()
+                
+    def set_comp_sensing(self, comp_sensing):
+        
+        self.settings['num_frames'] = self.calculate_num_frames()
+        
+    def set_cs_subset_dim(self, cs_subset_dim):
+        # this function should be overwritten in the specific measurement to set
+        # the specific maximum value (e.g. the dimention of the hadamard basis)
+        
+        self.settings['num_frames'] = self.calculate_num_frames()
            
     def calculate_margin(self):
         
         read_one_line = 9.74436 #(us)
         delay =  9 * read_one_line #(us)
         contingency = 0.04
+        
         self.eff_subarrayv = int(self.camera.subarrayv.val/self.camera.binning.val)
         
         return (1 + contingency) * (delay + (self.eff_subarrayv/2) * read_one_line) *1e-3 #(ms)
@@ -159,9 +170,11 @@ class BaseSvimMeasurement(Measurement):
         self.ui = load_qt_ui_file(self.ui_filename)
         self.setup_svim_mode_settings()
         self.PosNeg = self.settings.New('PosNeg', dtype = bool, initial = True)
-        self.ROI_s_z = self.settings.New('ROI_s_z', dtype=int, initial=256, unit = 'px' )
+        self.ROI_s_z = self.settings.New('ROI_s_z', dtype=int, initial=64, unit = 'px' )
         self.settings.New('ROI_s_y', dtype=int, initial=600, unit = 'px' )
         self.transpose_pattern = self.settings.New('transpose_pattern', dtype=bool, initial=False )
+        self.comp_sensing = self.settings.New('comp_sensing', dtype = bool, initial = False )
+        self.cs_subset_dim = self.settings.New('cs_subset_dim', dtype = int, initial = 4, vmin = 1)
         self.num_frames = self.settings.New('num_frames',ro = True, dtype = int, initial = self.calculate_num_frames())    # TODO The initial value of this setting is critical: so far it must be updated manually if one changes any other initial value. Should we calculate self.freqs during the setup period and put here initial = len(self.freqs)?
         self.exposure = self.settings.New("exposure", dtype = float, initial=100, vmin=1.004, vmax = 1e4, spinbox_step=10, spinbox_decimals=3, unit="ms")
         self.add_operation("read_subarray_vsize", self.read_subarray_vsize)
@@ -169,10 +182,10 @@ class BaseSvimMeasurement(Measurement):
         self.settings.New('effective_fps', dtype = float, initial = self.calculate_eff_fps(), vmin = 0.0, ro = True, spinbox_decimals = 2, unit = 'fps')
         self.settings.New('skip_upload', dtype=bool, initial=False )
         self.time_lapse = self.settings.New('time_lapse', dtype = bool, initial = False)
-        self.obs_time = self.settings.New('obs_time', dtype=float, initial= 0.0, vmin = 0, spinbox_decimals = 3, spinbox_step = 10.0,  unit = 's' )
+        self.obs_time = self.settings.New('obs_time', dtype=float, initial= 5.0, vmin = 0, spinbox_decimals = 3, spinbox_step = 10.0,  unit = 's' )
         self.dark_time = self.settings.New('dark_time', dtype = float, initial = 0.0, vmin = 0, spinbox_decimals = 3, spinbox_step = 1, unit = 's')
         self.time_frames_n  = self.settings.New('time_frames_n', dtype = int, initial = 1, vmin = 1, ro = True)
-        self.keep_shutter_open = self.settings.New('keep_shutter_open', dtype = bool, initial = False)
+        self.keep_shutter_open = self.settings.New('keep_shutter_open', dtype = bool, initial = True)
         self.settings.New('refresh_period', dtype=float, unit='s', spinbox_decimals=4, initial=0.04, vmin=0)
         self.settings.New('auto_range', dtype=bool, initial=True )
         self.settings.New('auto_levels', dtype=bool, initial=True )
@@ -183,6 +196,8 @@ class BaseSvimMeasurement(Measurement):
         self.exposure.hardware_set_func = self.set_exposure
         self.ROI_s_z.hardware_set_func = self.set_ROI_s_z
         self.transpose_pattern.hardware_set_func = self.set_transpose_pattern
+        self.comp_sensing.hardware_set_func = self.set_comp_sensing
+        self.cs_subset_dim.hardware_set_func = self.set_cs_subset_dim
         self.time_lapse.hardware_set_func = self.set_time_lapse
         self.obs_time.hardware_set_func = self.set_obs_time
         self.dark_time.hardware_set_func = self.set_dark_time
@@ -269,11 +284,21 @@ class BaseSvimMeasurement(Measurement):
         self.image = np.reshape(self.np_data,(self.eff_subarrayv, self.eff_subarrayh))
         self.camera.hamamatsu.stopAcquisition()
         
+        
+        # this is the number of frames that will be taken by the camera (e.g. the dimention of the subset for CS)
         num_frames = self.settings['num_frames']
+        
+        
+        # the DMD here needs the dimention of the complete basis that we want to upload
+        if hasattr(self, 'load_num_frames'):
+            dmd_num_frames = self.load_num_frames
+        else:
+            # this is in case CS is not implemented for a type of SVIM measurement
+            dmd_num_frames = num_frames
         
         self.settings['edge_trigger_margin'] = self.calculate_margin()
         self.dmd_hw.settings['exposure'] = int(exposure*1e3 + self.settings['edge_trigger_margin']*1e3)
-        exposure_dmd = [int(exposure*1e3 + self.settings['edge_trigger_margin']*1e3) ]*num_frames
+        exposure_dmd = [int(exposure*1e3 + self.settings['edge_trigger_margin']*1e3) ]*dmd_num_frames
         self.settings['effective_fps'] =  self.calculate_eff_fps()
         
         # I tell the camera how many frames to record
@@ -290,10 +315,10 @@ class BaseSvimMeasurement(Measurement):
             print("\n****************\nLoading pattern\n****************\n")
             t_load_init = time.time()
             
-            dark_time = [self.dmd_hw.dark_time.val]*num_frames
-            trigger_input = [self.dmd_hw.trigger_input.val]*num_frames
-            trigger_output = [self.dmd_hw.trigger_output.val]*num_frames
-            rep = num_frames
+            dark_time = [self.dmd_hw.dark_time.val]*dmd_num_frames
+            trigger_input = [self.dmd_hw.trigger_input.val]*dmd_num_frames
+            trigger_output = [self.dmd_hw.trigger_output.val]*dmd_num_frames
+            rep = dmd_num_frames
            
             transpose_pattern = self.settings['transpose_pattern']
     
@@ -340,9 +365,42 @@ class BaseSvimMeasurement(Measurement):
             time_index += 1 
             print(f' --- Volume acqusition number {time_index + 1} ---')
             
-            # specific iteration settings, e.g. selection of basis subset
-            # if time_index > 0:
-            #     self.run_iteration_settings(time_index)
+            
+            # Compressed sensing choice of basis subset
+            
+            if self.settings['comp_sensing'] == True:
+            
+                # "sequence" tells how to reorder and/or choose a subset of the loaded patterns for the current time frame
+                # NB: the pattern number starts from 0
+                
+                # sequence = [3,2,1,0] 
+                
+                sequence = self.run_iteration_cs_sequence(time_index)
+                print(f'\nPattern sequence for time point {time_index+1}: ', end = '')
+                print(sequence)
+                
+                if time_index == 0:
+                    self.CS_time_point_subsets = []
+                    
+                self.CS_time_point_subsets.append(sequence.copy())
+                
+                if self.settings['PosNeg'] == True:
+                    
+                    temp = []
+                    for i in sequence:
+                        temp.append(i*2)
+                        temp.append(i*2+1)
+                        
+                    sequence = temp
+                
+                repeatnum = len(sequence)
+                # print(sequence)
+                
+                
+                self.dmd_hw.dmd.reorderlut(sequence, repeatnum)
+                
+                
+            
             
             # Set trigger to external
     
@@ -479,6 +537,11 @@ class BaseSvimMeasurement(Measurement):
                 
         # out of for loop
         self.h5_group.attrs['real_time_frames_n'] = time_index + 1
+        
+        if self.settings['comp_sensing'] == True:
+            # print(self.CS_time_point_subsets)
+            self.h5_group.attrs['CS_time_point_subsets'] = self.CS_time_point_subsets
+        
         self.h5file.close()     
         
         
@@ -489,8 +552,8 @@ class BaseSvimMeasurement(Measurement):
     def run_svim_mode_function(self):
         pass
  
-    # def run_iteration_settings(self, **args):
-    #     pass
+    def run_iteration_cs_sequence(self, **args):
+        pass
  
     
     def initH5(self):

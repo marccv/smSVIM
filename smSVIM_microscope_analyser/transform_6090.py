@@ -21,7 +21,7 @@ class dct_6090:
         
         # It receives the actual frequencies used to illuminate the sample
         
-        self.N = int(np.ceil(max(disp_f)*2) + 1) # sort of Shannon Th.
+        self.N = int(np.ceil(max(disp_f)*2) + 0) # sort of Shannon Th.
         
         # I throw away doubles
         mask = np.append(np.diff(disp_f)!= 0, True)
@@ -41,11 +41,21 @@ class dct_6090:
         
         self.matrix =  np.cos(2*np.pi * np.multiply(self.K,self.X) )
         
-        # fig1, ax1 = plt.subplots(1,1)
+        fig1, ax1 = plt.subplots(1,1)
+        plt.title('First 4 elements of cosine basis')
         # ax1.set_ylim([-1.1,1.1])
-        # ax1.set_xlabel('x', fontsize = 12)
-        # for i in range(4):
-        #     ax1.plot(self.x, self.matrix[i,:], '-o')
+        ax1.set_xlabel('z', fontsize = 12)
+        for i in range(4):
+            ax1.plot(self.x, self.matrix[i,:], '-o', label = f'{i/2:.1f} periods')
+        ax1.legend()
+        
+        # fig1.savefig('4cosbasis.pdf')
+        
+        fig1=plt.figure()
+        fig1.clf()
+        # fig1.suptitle(f'Inverted image XY projection\n{self.params}')
+        ax1=fig1.add_subplot(111)
+        xy = ax1.imshow(self.matrix)
         
     def create_matrix_sq(self):
         
@@ -56,12 +66,21 @@ class dct_6090:
         Periods = np.reciprocal(temp)
         self.matrix = -1 + 2*( (self.X + Periods/4)%(Periods) < (Periods/2))
         
-        # fig1, ax1 = plt.subplots(1,1)
-        # ax1.set_ylim([-1.1,1.3])
-        # ax1.set_xlabel('x', fontsize = 12)
-        # for i in range(4):
-        #     ax1.plot(self.x, self.matrix[i,:] + 0.08*i, '-o')
+        fig1, ax1 = plt.subplots(1,1)
+        plt.title('First 4 elements of square wave basis')
+        ax1.set_ylim([-1.1,1.3])
+        ax1.set_xlabel('z', fontsize = 12)
+        for i in range(4):
+            ax1.plot(self.x, self.matrix[i,:] + 0.08*i, '-o', label = f'{i/2:.1f} periods')
+        ax1.legend()
         
+        # fig1.savefig('4sqbasis.pdf')
+        
+        fig1=plt.figure()
+        fig1.clf()
+        # fig1.suptitle(f'Inverted image XY projection\n{self.params}')
+        ax1=fig1.add_subplot(111)
+        xy = ax1.imshow(self.matrix)
 
         
     def compute_inverse(self):
@@ -118,7 +137,7 @@ def create_hadamard_matrix(num_of_patterns, had_type = 'hadam'):
         return Pr @ hadamard(num_of_patterns) @ Pc
     
     
-    
+    return None
     
     
     

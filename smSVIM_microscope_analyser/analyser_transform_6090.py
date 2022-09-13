@@ -98,6 +98,7 @@ class coherentSVIM_analysis:
                        'lsqr_damp': 1e-4,
                        'single_volume_time_index' : 0,
                        'save_label': '',
+                       'complete_time_lapse_save_label': '',
                        'time_lapse_save_label': '',
                        'time_lapse_mode': 'sum',
                        'time_lapse_view': 0,
@@ -704,9 +705,13 @@ class coherentSVIM_analysis:
                 newpath = self.file_path[:-3] + '_ANALYSED'
                 if not os.path.exists(newpath):
                     os.makedirs(newpath)
+                                
                 
+                if len(self.params["complete_time_lapse_save_label"]) >0:
+                    fname = os.path.join(newpath, f'time_lapse_inverted_complete_{self.params["complete_time_lapse_save_label"]}.h5')
+                else:
+                    fname = os.path.join(newpath, 'time_lapse_inverted_complete.h5')
                 
-                fname = os.path.join(newpath, 'time_lapse_inverted_complete.h5')
                 
                 while os.path.exists(fname):
                     fname = fname[:-3] + '_bis.h5'

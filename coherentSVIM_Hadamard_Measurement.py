@@ -28,7 +28,7 @@ def scramble(H, N):
 # def walsh_gen_old(n):
     
 #     from numpy import genfromtxt
-#     return genfromtxt(f'/Users/marcovitali/Documents/Poli/tesi/coherentSVIM/hadamard/wh{n}.csv', delimiter=',')
+#     return genfromtxt(f"D:\\LabPrograms\\ScopeFoundry_POLIMI\\smSVIM_Microscope\\pattern\\walsh_hadamard\\wh{n}.csv", delimiter=',')
 
 def walsh_gen(n):
     
@@ -38,6 +38,7 @@ def walsh_gen(n):
     order = np.argsort(norm)
      
     return H[order,:]
+
 
 def create_hadamard_patterns(num_of_patterns = 32, had_type = 'normal' , transpose_pattern=False, cropped_field_size = [256, 512],
                              im_size = [1080, 1920]):
@@ -124,8 +125,17 @@ class coherentSvim_Hadamard_Measurement(BaseSvimMeasurement):
     name = "coherentSvim_Hadamard"
     
     def calculate_num_frames(self):
-        return (1 + self.settings['PosNeg']) *  self.settings['had_pat_num']
+        
+        # This tells how big is the complete basis that we upload, at the begining of the measurement, to the DMD
+        self.load_num_frames = (1 + self.settings['PosNeg']) *  self.settings['had_pat_num']
+        
+        
+        # This on the other hand is the number of frames that the camera is going to acquire
+        if not self.settings['comp_sensing']:
+            return (1 + self.settings['PosNeg']) *  self.settings['had_pat_num']
     
+        else:
+            return (1 + self.settings['PosNeg']) *  self.settings['cs_subset_dim']
     
     def set_had_pat_num(self, had_pat_num):
         
@@ -139,22 +149,33 @@ class coherentSvim_Hadamard_Measurement(BaseSvimMeasurement):
             else:
                 self.settings['had_pat_num'] = higher
         else:
-            self.settings['num_frames']  =(1 + self.settings['PosNeg']) * had_pat_num
+            self.settings['num_frames']  = self.calculate_num_frames()
             
             if hasattr(self, 'time_frames_n'):
                 self.settings['time_frames_n'] = self.calculate_time_frames_n()
             
          
-  
+
+    
+        
+    def set_cs_subset_dim(self, cs_subset_dim):
+        
+        if cs_subset_dim > self.settings['had_pat_num']:
+            self.settings['cs_subset_dim'] = self.settings['had_pat_num']
+            
+        else:
+            self.settings['num_frames'] = self.calculate_num_frames()
         
     def setup_svim_mode_settings(self):
         
-        self.had_pat_num = self.settings.New('had_pat_num', dtype=int, initial=64 , vmin = 1 )
+        self.had_pat_num = self.settings.New('had_pat_num', dtype=int, initial=16 , vmin = 1 )
         self.had_pat_num.hardware_set_func = self.set_had_pat_num
         
-        # self.settings.New('reorder_test', dtype = bool, initial = True )
+        
         self.settings.New('had_type', dtype = str, choices = [ 'normal', 'walsh', 'scrambled'], initial = 'normal')
-   
+        
+        
+        
     def run_svim_mode_function(self):
         transpose_pattern = self.settings['transpose_pattern']
         cropped_field_size = [self.settings['ROI_s_z'], self.settings['ROI_s_y']]
@@ -175,23 +196,13 @@ class coherentSvim_Hadamard_Measurement(BaseSvimMeasurement):
                 images.append(im_neg)
         return images
         
-    # def run_iteration_settings(self, time_index):
+    def run_iteration_cs_sequence(self, time_index):
         
-    #     if self.settings['reorder_test'] == True:
-            
-    #         sequence = [2,1] # random(?) subset of hadamard patterns to use in the current time frame
-            
-    #         if self.settings['PosNeg'] == True:
-                
-    #             temp = []
-    #             for i in sequence:
-    #                 temp.append(i*2-1)
-    #                 temp.append(i*2)
-                    
-    #             sequence = temp
-            
-    #         repeatnum = len(sequence)
-            
-            
-    #         self.dmd_hw.dmd.reorderlut(sequence, repeatnum)         
-        
+        """
+        Defines the basis subset (and its order) for compressed sensing acquisitions
+        Note: the function must return a list
+        """
+    
+        # returns a random list of length (cs_subset_dim) of indexes going from 0 to (had_pat_num - 1)
+        return list(np.random.permutation(self.settings['had_pat_num'])[0:self.settings['cs_subset_dim']])
+         
