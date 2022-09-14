@@ -60,54 +60,82 @@ class BaseSvimMeasurement(Measurement):
         return 64
     
     
-    def calculate_time_frames_n(self):
+    # def calculate_time_frames_n(self):
+        
+    #     if not self.settings['time_lapse']:
+    #         return int(1)
+    #     else:
+    #         dead_time = 0.185 #seconds, empirical dead computational time not considering the time necessary to open and close the shutter
+    #         delay = (not self.settings['keep_shutter_open']) * 0.3 +  dead_time
+            
+    #         return int(np.ceil( self.settings['obs_time'] / ( (self.settings['num_frames']/self.settings['effective_fps']) + self.settings['dark_time'] + delay ) ))  
+    
+    def calculate_time_lapse_duration(self):
+        
         
         if not self.settings['time_lapse']:
-            return int(1)
+            return 0
         else:
-            delay = (not self.settings['keep_shutter_open']) * 0.3 +  0.3  # 0.3s is the trigger dead time we set, 0.3 is an empirical dead computational time
-            return int(np.ceil( self.settings['obs_time'] / ( (self.settings['num_frames']/self.settings['effective_fps']) + self.settings['dark_time'] + delay ) ))  
-     
+            dead_time = 0.185 #seconds, empirical dead computational time not considering the time necessary to open and close the shutter
+            delay = (not self.settings['keep_shutter_open']) * 0.3 +  dead_time
+            
+        return self.settings['time_point_num'] * ( (self.settings['num_frames']/self.settings['effective_fps']) + self.settings['dark_time'] + delay ) + 0.6 # 0.6 is a start up dead time so it's not multiplied by the number of time points
+        
     
                 
     def set_PosNeg(self, PosNeg):
         
         if hasattr(self, 'num_frames') and hasattr(self, 'transpose_pattern'):
             self.settings['num_frames'] = self.calculate_num_frames()
-            
-        if hasattr(self, 'time_frames_n'):
-            self.settings['time_frames_n'] = self.calculate_time_frames_n()
+        
+        if hasattr(self, 'time_point_num'):
+            self.check_time_point_number()
+        
+        if hasattr(self, 'est_obs_time'):
+            self.settings['est_obs_time'] = self.calculate_time_lapse_duration()
                 
     def set_ROI_s_z(self, ROI_s_z):
         
         if hasattr(self, 'transpose_pattern'):
             self.settings['num_frames'] = self.calculate_num_frames()
-        if hasattr(self, 'time_frames_n'):
-            self.settings['time_frames_n'] = self.calculate_time_frames_n()
+        if hasattr(self, 'est_obs_time'):
+            self.settings['est_obs_time'] = self.calculate_time_lapse_duration()
             
     def set_ROI_s_y(self, ROI_s_y):
         
         if hasattr(self, 'transpose_pattern'):
             self.settings['num_frames'] = self.calculate_num_frames()
-        if hasattr(self, 'time_frames_n'):
-            self.settings['time_frames_n'] = self.calculate_time_frames_n()
+        if hasattr(self, 'est_obs_time'):
+            self.settings['est_obs_time'] = self.calculate_time_lapse_duration()
             
     def set_transpose_pattern(self, transpose):
         
         self.settings['num_frames'] = self.calculate_num_frames()
               
-        if hasattr(self, 'time_frames_n'):
-                self.settings['time_frames_n'] = self.calculate_time_frames_n()
+        if hasattr(self, 'est_obs_time'):
+            self.settings['est_obs_time'] = self.calculate_time_lapse_duration()
                 
     def set_comp_sensing(self, comp_sensing):
         
-        self.settings['num_frames'] = self.calculate_num_frames()
+        # TODO: Make the hadam type change to scrambled in the settings
+        # this is overwritten in the particular measurement
         
-    def set_cs_subset_dim(self, cs_subset_dim):
+        self.settings['num_frames'] = self.calculate_num_frames()
+        if hasattr(self, 'time_point_num'):
+                self.check_time_point_number()
+                
+        if hasattr(self, 'est_obs_time'):
+            self.settings['est_obs_time'] = self.calculate_time_lapse_duration()
+        
+    def set_comp_factor(self, comp_factor):
         # this function should be overwritten in the specific measurement to set
         # the specific maximum value (e.g. the dimention of the hadamard basis)
         
         self.settings['num_frames'] = self.calculate_num_frames()
+        if hasattr(self, 'time_point_num'):
+                self.check_time_point_number()
+        if hasattr(self, 'est_obs_time'):
+                self.settings['est_obs_time'] = self.calculate_time_lapse_duration()       
            
     def calculate_margin(self):
         
@@ -128,34 +156,82 @@ class BaseSvimMeasurement(Measurement):
         self.camera.settings['exposure_time'] = exposure*1e-3
         self.settings['effective_fps'] =  self.calculate_eff_fps()
         
-        if hasattr(self, 'time_frames_n'):
-            self.settings['time_frames_n'] = self.calculate_time_frames_n()
+        if hasattr(self, 'est_obs_time'):
+            self.settings['est_obs_time'] = self.calculate_time_lapse_duration()
      
     def read_subarray_vsize(self):
         
         self.settings['edge_trigger_margin'] = self.calculate_margin()
         self.settings['effective_fps'] =  self.calculate_eff_fps()   
         
-        if hasattr(self, 'time_frames_n'):
-            self.settings['time_frames_n'] = self.calculate_time_frames_n()
+        if hasattr(self, 'est_obs_time'):
+            self.settings['est_obs_time'] = self.calculate_time_lapse_duration()
     
     def set_time_lapse(self, time_lapse):
-        if hasattr(self, 'time_frames_n'):
-            self.settings['time_frames_n'] = self.calculate_time_frames_n()
         
-    def set_obs_time(self, obs_time):
+        if not time_lapse:
+            
+            if hasattr(self, 'time_point_num'):
+                self.settings['time_point_num'] = 1
+            if hasattr(self, 'est_obs_time'):
+                self.settings['est_obs_time'] = 0
+            
+        else:
         
-        if hasattr(self, 'time_frames_n'):
-            self.settings['time_frames_n'] = self.calculate_time_frames_n()
+           if hasattr(self, 'time_point_num'):
+                self.settings['time_point_num'] = 20
+           if hasattr(self, 'est_obs_time'):
+                self.settings['est_obs_time'] = self.calculate_time_lapse_duration()
+        
+    def set_time_point_num(self,time_point_num):
+        
+        if not self.settings['time_lapse'] and self.settings['time_point_num'] != 1:
+            self.settings['time_point_num'] = 1
+            
+        if self.settings['time_lapse'] and self.settings['num_frames'] *time_point_num > 400:  # DMD limitation
+        
+            
+        
+            while self.settings['num_frames'] *time_point_num > 400:
+                time_point_num -= 1
+            
+            print(f'----------------\nThe maximum number of time points has been reached ({time_point_num}),\nthe total number of patterns is {self.settings["num_frames"] *time_point_num}\n----------------')
+                
+            if hasattr(self, 'time_point_num'):
+                self.settings['time_point_num'] = time_point_num
+            
+            
+            if hasattr(self, 'est_obs_time'):
+                self.settings['est_obs_time'] = self.calculate_time_lapse_duration()
+                
+        self.settings['num_frames'] = self.calculate_num_frames() # this is used to calculate self.load_num_frames
+        
+        if hasattr(self, 'est_obs_time'):
+            self.settings['est_obs_time'] = self.calculate_time_lapse_duration()
+        
+        return time_point_num
+                
+    
+    def check_time_point_number(self):
+        
+        # Right now I check for this consition beacuse I am gonna do some tests for Teresa where the scrambled hadamard are different for each time point even CS is not used
+        
+        time_point_num = 20 #S This is the initial condition, in later checks it will be overwritten by the next two lines
+        
+        if hasattr(self, 'time_point_num'):
+            time_point_num = self.settings['time_point_num']
+        
+        return self.set_time_point_num(time_point_num)
+       
     def set_dark_time(self, dark_time):
         
-        if hasattr(self, 'time_frames_n'):
-            self.settings['time_frames_n'] = self.calculate_time_frames_n()
+        if hasattr(self, 'est_obs_time'):
+            self.settings['est_obs_time'] = self.calculate_time_lapse_duration()
     
     def set_keep_shutter_open(self, keep_shutter_open):
         
-        if hasattr(self, 'time_frames_n'):
-            self.settings['time_frames_n'] = self.calculate_time_frames_n()
+        if hasattr(self, 'est_obs_time'):
+            self.settings['est_obs_time'] = self.calculate_time_lapse_duration()
             
             
      
@@ -173,19 +249,25 @@ class BaseSvimMeasurement(Measurement):
         self.ROI_s_z = self.settings.New('ROI_s_z', dtype=int, initial=64, unit = 'px' )
         self.settings.New('ROI_s_y', dtype=int, initial=600, unit = 'px' )
         self.transpose_pattern = self.settings.New('transpose_pattern', dtype=bool, initial=False )
-        self.comp_sensing = self.settings.New('comp_sensing', dtype = bool, initial = False )
-        self.cs_subset_dim = self.settings.New('cs_subset_dim', dtype = int, initial = 4, vmin = 1)
+        
+        self.comp_sensing = self.settings.New('comp_sensing', dtype = bool, initial = False )# random hadamards patterns
+        self.comp_factor = self.settings.New('comp_factor', dtype = int, initial = 4, vmin = 1)
+        
         self.num_frames = self.settings.New('num_frames',ro = True, dtype = int, initial = self.calculate_num_frames())    # TODO The initial value of this setting is critical: so far it must be updated manually if one changes any other initial value. Should we calculate self.freqs during the setup period and put here initial = len(self.freqs)?
-        self.exposure = self.settings.New("exposure", dtype = float, initial=100, vmin=1.004, vmax = 1e4, spinbox_step=10, spinbox_decimals=3, unit="ms")
+        self.exposure = self.settings.New("exposure", dtype = float, initial=1.2, vmin=1.004, vmax = 1e4, spinbox_step=10, spinbox_decimals=3, unit="ms")
         self.add_operation("read_subarray_vsize", self.read_subarray_vsize)
         self.settings.New('edge_trigger_margin', dtype = float, initial = self.calculate_margin(), vmin = 0.0, ro=True, spinbox_decimals = 3 , unit = 'ms')
         self.settings.New('effective_fps', dtype = float, initial = self.calculate_eff_fps(), vmin = 0.0, ro = True, spinbox_decimals = 2, unit = 'fps')
         self.settings.New('skip_upload', dtype=bool, initial=False )
-        self.time_lapse = self.settings.New('time_lapse', dtype = bool, initial = False)
-        self.obs_time = self.settings.New('obs_time', dtype=float, initial= 5.0, vmin = 0, spinbox_decimals = 3, spinbox_step = 10.0,  unit = 's' )
+        
+        
+        self.time_lapse = self.settings.New('time_lapse', dtype = bool, initial = True)
+        self.time_point_num  = self.settings.New('time_point_num', dtype = int, initial = self.check_time_point_number(), vmin = 1)
         self.dark_time = self.settings.New('dark_time', dtype = float, initial = 0.0, vmin = 0, spinbox_decimals = 3, spinbox_step = 1, unit = 's')
-        self.time_frames_n  = self.settings.New('time_frames_n', dtype = int, initial = 1, vmin = 1, ro = True)
         self.keep_shutter_open = self.settings.New('keep_shutter_open', dtype = bool, initial = True)
+        self.est_obs_time = self.settings.New('est_obs_time', dtype=float, initial=self.calculate_time_lapse_duration() , vmin = 0, spinbox_decimals = 3,  unit = 's' ,ro = True)
+        
+        
         self.settings.New('refresh_period', dtype=float, unit='s', spinbox_decimals=4, initial=0.04, vmin=0)
         self.settings.New('auto_range', dtype=bool, initial=True )
         self.settings.New('auto_levels', dtype=bool, initial=True )
@@ -197,9 +279,9 @@ class BaseSvimMeasurement(Measurement):
         self.ROI_s_z.hardware_set_func = self.set_ROI_s_z
         self.transpose_pattern.hardware_set_func = self.set_transpose_pattern
         self.comp_sensing.hardware_set_func = self.set_comp_sensing
-        self.cs_subset_dim.hardware_set_func = self.set_cs_subset_dim
+        self.comp_factor.hardware_set_func = self.set_comp_factor
         self.time_lapse.hardware_set_func = self.set_time_lapse
-        self.obs_time.hardware_set_func = self.set_obs_time
+        self.time_point_num.hardware_set_func = self.set_time_point_num
         self.dark_time.hardware_set_func = self.set_dark_time
         self.keep_shutter_open.hardware_set_func = self.set_keep_shutter_open
         # TODO This does not actually work, the wrong initial value for num_frames is not corrected! 
@@ -286,6 +368,7 @@ class BaseSvimMeasurement(Measurement):
         
         
         # this is the number of frames that will be taken by the camera (e.g. the dimention of the subset for CS)
+        self.calculate_num_frames()
         num_frames = self.settings['num_frames']
         
         
@@ -295,6 +378,9 @@ class BaseSvimMeasurement(Measurement):
         else:
             # this is in case CS is not implemented for a type of SVIM measurement
             dmd_num_frames = num_frames
+            
+            
+        print(f'load num frames = {self.load_num_frames}\nnum_frames = {num_frames}')
         
         self.settings['edge_trigger_margin'] = self.calculate_margin()
         self.dmd_hw.settings['exposure'] = int(exposure*1e3 + self.settings['edge_trigger_margin']*1e3)
@@ -356,19 +442,17 @@ class BaseSvimMeasurement(Measurement):
         if self.settings['time_lapse'] == True:
             print('Keep shutter open: ',self.settings['keep_shutter_open'])
 
-        # while loop for time laps
-        time_index = -1
 
-        t_init = time.time()  # we record the initial time after the first upload
-        while True:
+        self.t_init = time.time()  # we record the initial time after the first upload
+        for time_index in range(self.settings['time_point_num']):
             
-            time_index += 1 
             print(f' --- Volume acqusition number {time_index + 1} ---')
             
             
             # Compressed sensing choice of basis subset
             
-            if self.settings['comp_sensing'] == True:
+            # if self.settings['comp_sensing'] == True:
+            if True: # in this script I always upload different matrices for different time frames (different random scrambled hadamards) so I always need to pick a subset of the original DMD LUT
             
                 # "sequence" tells how to reorder and/or choose a subset of the loaded patterns for the current time frame
                 # NB: the pattern number starts from 0
@@ -384,14 +468,14 @@ class BaseSvimMeasurement(Measurement):
                     
                 self.CS_time_point_subsets.append(sequence.copy())
                 
-                if self.settings['PosNeg'] == True:
+                # if self.settings['PosNeg'] == True:
                     
-                    temp = []
-                    for i in sequence:
-                        temp.append(i*2)
-                        temp.append(i*2+1)
+                #     temp = []
+                #     for i in sequence:
+                #         temp.append(i*2)
+                #         temp.append(i*2+1)
                         
-                    sequence = temp
+                #     sequence = temp
                 
                 repeatnum = len(sequence)
                 # print(sequence)
@@ -449,7 +533,7 @@ class BaseSvimMeasurement(Measurement):
             print('\nSaving frames')
             
             self.save_h5dataset(time_index)
-                    
+            print(f'Camera image buffer {self.camera.hamamatsu.number_image_buffers}')
             while frame_index < self.camera.hamamatsu.number_image_buffers:
     
                 # Get frames.
@@ -515,19 +599,11 @@ class BaseSvimMeasurement(Measurement):
             # exit conditions
             #=====================================
             
-            if not self.settings['time_lapse']:
-                time_end_of_frame = time.time() - t_init
-                print(f'Total time elapsed: {time_end_of_frame:.3f} s\n')
-                break
-                
-            else:
-                time.sleep(self.settings['dark_time']) #seconds
-                time_end_of_frame = time.time() - t_init
-                print(f'Total time elapsed: {time_end_of_frame:.3f} s\n')
-                if time_end_of_frame > self.settings['obs_time']: #seconds
-                    self.shutter_hw.shutter.close_shutter()
-                    print(f'\nShutter closed. Opened for {time.time() - t_shutter_open:.3f} s')
-                    break
+            
+            time.sleep(self.settings['dark_time']) #seconds
+            time_end_of_frame = time.time() - self.t_init
+            print(f'Total time elapsed: {time_end_of_frame:.3f} s\n')
+            
               
             if self.interrupt_measurement_called:
                 self.shutter_hw.shutter.close_shutter()
@@ -536,11 +612,16 @@ class BaseSvimMeasurement(Measurement):
                 
                 
         # out of for loop
+        self.shutter_hw.shutter.close_shutter()
+        print(f'\nShutter closed. Opened for {time.time() - t_shutter_open:.3f} s')
         self.h5_group.attrs['real_time_frames_n'] = time_index + 1
         
         if self.settings['comp_sensing'] == True:
             # print(self.CS_time_point_subsets)
             self.h5_group.attrs['CS_time_point_subsets'] = self.CS_time_point_subsets
+        
+        # I save the patterns that I have used for the particular measurement, also taking into account that Teresa uses Matlab and so saving the random number generator seed would be of little use
+        self.h5_group.attrs['used_posneg_patterns'] = self.used_posneg_patterns
         
         self.h5file.close()     
         
@@ -593,4 +674,5 @@ class BaseSvimMeasurement(Measurement):
         image_h5.attrs['element_size_um'] =  [1,1,1] # required for compatibility with imageJ
         timestamp = time.strftime("%y%m%d_%H%M%S", time.localtime())
         image_h5.attrs['timestamp'] = timestamp
+        image_h5.attrs['seconds_elapsed_at_this_time_point'] = time.time() - self.t_init
         self.image_h5 = image_h5            
