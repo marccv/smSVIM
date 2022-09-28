@@ -9,3 +9,5 @@ hadamard/quick_gen_wh.m
 hadamard/reorder_w.py
 smSVIM_microscope_analyser/simil_pos_neg.py
 tests.py
+*.xml
+*.iml
