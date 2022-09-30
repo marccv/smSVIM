@@ -93,13 +93,13 @@ delta_int = 0.8 #additional fraction of peak intensity
 delta_z = 0.2 #percentage of z range
 # delta_z = 0
 
-changing_intensity = np.linspace(30, 30*(1 + delta_int), n)
-changing_position = np.linspace(10, 10 + (n*delta_z), n)
+changing_intensity = np.linspace(30, 30*(1 + delta_int), 2*n)
+changing_position = np.linspace(10, 10 + (n*delta_z), 2*n)
 
-obj_moving = np.zeros([n_obj,n])
+obj_moving = np.zeros([n_obj,2*n])
 
 cmap = matplotlib.cm.get_cmap('viridis')
-gradient = np.linspace(0,1, n)
+gradient = np.linspace(0,1, 2*n)
 gradient_for_im = np.vstack((gradient, gradient)).transpose()
 
 fig, axs = plt.subplots(1, 2, tight_layout = True, gridspec_kw={'width_ratios': [20, 1]}, figsize = [5,3])
@@ -116,11 +116,11 @@ axs[1].tick_params(axis = 'x',      # changes apply to the x-axis
     bottom=False,      # ticks along the bottom edge are off
     top=False,         # ticks along the top edge are off
     labelbottom=False)
-plt.yticks(ticks = [0, int(n-1)], labels = ['1', str(n)])
+plt.yticks(ticks = [0, int(2*n-1)], labels = ['1', str(2*n)])
 
 axs[1].set_ylabel('frame number')
 
-for i in range(n):
+for i in np.linspace(0,2*n-1, int(n/1), dtype = int):
     
     
     profile = changing_intensity[i] * rect(x, 5, 4) + \
@@ -221,68 +221,17 @@ ax = fig.add_subplot(111)
 fig.suptitle(f'Inverted profiles (noise $\sigma$ = {sigma:.0f})')
 ax.set_xlabel('z (px)')
 ax.set_ylabel('gray scale intensity')
-ax.plot(x - 0.5*np.ones(x.shape), 30*obj_moving[:,0], label = 'Scaled object at t = 0')
-
+ax.plot(x, 30*obj_moving[:,0], label = 'Scaled object at t = 0')
 # ax.plot(inv_posneg, '-o', label = 'inv posneg')
-ax.plot( inv_posneg_lsqr, '-', linewidth = 4,label = 'posneg inverted')
+ax.plot(np.linspace(0.5, n -0.5, n), inv_posneg_lsqr, '-', linewidth = 4,label = 'posneg inverted')
 
-ax.plot(inv_pos, '-x', markersize = 6, label = 'pos inverted')
+ax.plot(np.linspace(0.5, n -0.5, n), inv_pos, '-', label = 'pos inverted')
 # ax.plot(inv_make_posneg, '-o', label = 'inv fake posneg')
-ax.plot(inv_make_posneg_lsqr, '-o', markersize = 4,label = 'pos + make_posneg inverted')
+ax.plot(np.linspace(0.5, n -0.5, n), inv_make_posneg_lsqr, '-o', markersize = 4,label = 'pos + make_posneg inverted')
 
-ax.plot(inv_pos_no_CC, '--', label = 'pos + no CC inverted')
+ax.plot(np.linspace(0.5, n -0.5, n), inv_pos_no_CC, '--', label = 'pos + no CC inverted')
 
-ax.plot(x - 0.5*np.ones(x.shape), 30*obj_moving[:,-1],'--', linewidth = 0.7, label = f'Scaled object at t = {n-1}', color = 'C0')
-
-ax.set_ylim([-2e3, 12e3])
+ax.set_ylim([-2e3, 10e3])
 ax.ticklabel_format(axis = 'y', style = 'sci', scilimits = (0,0))
-ax.text(1,8e3, f'$\\Delta I_1$ = {delta_int}\n$\\Delta z_2$ = {delta_z}')
+ax.text(1.5,8e3, f'$\\Delta I_1$ = {delta_int}\n$\\Delta z_2$ = {delta_z}')
 ax.legend()
-
-
-
-
-#%% LIGHT SHEET
-# Perfect light sheet, for example having the sample moving through the light sheet
-
-M_ls = np.repeat(np.eye(n), repeat).reshape(n, n_obj)
-# print(M_ls)
-
-
-#----------------------
-# additive noise
-#----------------------
-
-sigma_ls = sigma # change here to make them different
-det_noise_ls = np.random.normal(0,sigma_ls, (n,1))
-ls_raw = ((M_ls@obj_moving).diagonal()).reshape([n,1]) + det_noise_ls
-
-
-#----------------------
-# multiplicative noise
-#----------------------
-
-# sigma_ls = sigma
-# det_noise_ls = np.random.normal(1,sigma_ls, (n,1))
-# ls_raw = np.multiply( ((M_ls@obj_moving).diagonal()).reshape([n,1]), det_noise_ls)
-
-
-
-
-fig = plt.figure(figsize = [5,3])
-ax = fig.add_subplot(111)
-
-fig.suptitle(f'Light Sheet profile (noise $\sigma$ = {sigma_ls:.0f})')
-ax.set_xlabel('z (px)')
-ax.set_ylabel('gray scale intensity')
-
-ax.plot(x - 0.5*np.ones(x.shape), 65*obj_moving[:,0], color = 'C0', label = 'Scaled object at t = 0')
-ax.plot(x - 0.5*np.ones(x.shape), 65*obj_moving[:,-1],'--', linewidth = 0.7, label = f'Scaled object at t = {n-1}', color = 'C0')
-
-ax.plot(ls_raw, '-o', color = 'C1', label = ' Light Sheet')
-
-ax.text(0,6e3, f'$\\Delta I_1$ = {delta_int}\n$\\Delta z_2$ = {delta_z}')
-ax.ticklabel_format(axis = 'y', style = 'sci', scilimits = (0,0))
-ax.legend()
-ax.set_ylim([-300, 8e3])
-
