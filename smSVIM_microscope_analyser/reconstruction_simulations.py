@@ -24,8 +24,8 @@ repeat = 64
 n_obj = n*repeat
 
 
-x = np.linspace(-n_obj/2, n_obj/2, n_obj)
-cont = 100*gauss(x, 0, n_obj/3)
+x_pattern = np.linspace(-n_obj/2, n_obj/2, n_obj)
+cont = 100*gauss(x_pattern, 0, n_obj/3)
 
 pattern_offsett = np.tile(cont, (n,1))
 
